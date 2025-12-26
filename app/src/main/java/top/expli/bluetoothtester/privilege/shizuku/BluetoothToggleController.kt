@@ -1,4 +1,4 @@
-package top.expli.bluetoothtester.shizuku
+package top.expli.bluetoothtester.privilege.shizuku
 
 import android.bluetooth.BluetoothAdapter
 import android.content.Context
@@ -74,7 +74,7 @@ class BluetoothToggleController(private val context: Context) {
                 return
             }
             onProgress(idx, onState)
-            if (onMs > 0) kotlinx.coroutines.delay(onMs)
+            if (onMs > 0) delay(onMs)
 
             val offResult = setEnabled(false)
             val offState = currentState()
@@ -83,7 +83,7 @@ class BluetoothToggleController(private val context: Context) {
                 return
             }
             onProgress(idx + 1, offState)
-            if (offMs > 0) kotlinx.coroutines.delay(offMs)
+            if (offMs > 0) delay(offMs)
         }
     }
 

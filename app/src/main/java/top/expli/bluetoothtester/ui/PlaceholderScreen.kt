@@ -1,4 +1,4 @@
-package top.expli.bluetoothtester
+package top.expli.bluetoothtester.ui
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column

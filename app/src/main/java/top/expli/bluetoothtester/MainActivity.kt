@@ -1,10 +1,6 @@
 package top.expli.bluetoothtester
 
-import android.os.Build
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
-import android.view.Window
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -20,7 +16,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -33,7 +28,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.BluetoothSearching
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.Scanner
@@ -44,7 +38,6 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -53,10 +46,8 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -71,17 +62,19 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import top.expli.bluetoothtester.shizuku.ShizukuHelper
-import top.expli.bluetoothtester.shizuku.ShizukuState
-import top.expli.bluetoothtester.shizuku.ShizukuServiceState
+import top.expli.bluetoothtester.privilege.shizuku.ShizukuHelper
+import top.expli.bluetoothtester.privilege.shizuku.ShizukuState
+import top.expli.bluetoothtester.privilege.shizuku.ShizukuServiceState
+import top.expli.bluetoothtester.ui.AdvancedPermissionScreen
+import top.expli.bluetoothtester.ui.BluetoothToggleScreen
+import top.expli.bluetoothtester.ui.PlaceholderScreen
+import top.expli.bluetoothtester.ui.SettingsScreen
 import top.expli.bluetoothtester.ui.theme.BluetoothTesterTheme
 
 class MainActivity : ComponentActivity() {
@@ -271,8 +264,8 @@ private fun MainScreen(
     onNavigateToBluetoothToggle: () -> Unit = {}
 ) {
     val context = LocalContext.current
-    var shizukuState by remember { mutableStateOf<ShizukuState?>(null) }
     val serviceState by ShizukuHelper.serviceStateFlow.collectAsState()
+    val shizukuState by ShizukuHelper.stateFlow.collectAsState()
     var renderMain by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
         withFrameNanos { }
@@ -280,39 +273,13 @@ private fun MainScreen(
     }
     LaunchedEffect(context) {
         val appCtx = context.applicationContext
-        shizukuState = withContext(Dispatchers.IO) { ShizukuHelper.currentState(appCtx) }
-        ShizukuHelper.observeState(appCtx) { state ->
-            shizukuState = state
-        }
+        // init 已在 Activity onCreate 调用，collectAsState 可自动获得状态
+        ShizukuHelper.init(appCtx)
     }
-    val resolvedShizukuState = shizukuState ?: ShizukuState.NotRunning
+    val resolvedShizukuState = shizukuState
 
     val menuItems = remember {
         listOf(
-            MenuItem(
-                id = "scan",
-                title = "扫描设备",
-                description = "搜索附近的蓝牙设备",
-                icon = Icons.AutoMirrored.Filled.BluetoothSearching
-            ),
-            MenuItem(
-                id = "paired",
-                title = "已配对设备",
-                description = "查看和管理已配对的蓝牙设备",
-                icon = Icons.Default.Devices
-            ),
-            MenuItem(
-                id = "ble_scanner",
-                title = "BLE 扫描器",
-                description = "扫描低功耗蓝牙设备并查看详细信息",
-                icon = Icons.Default.Scanner
-            ),
-            MenuItem(
-                id = "classic_bluetooth",
-                title = "经典蓝牙",
-                description = "测试经典蓝牙连接和数据传输",
-                icon = Icons.Default.Bluetooth
-            ),
             MenuItem(
                 id = "bluetooth_toggle",
                 title = "蓝牙开关",
@@ -476,20 +443,21 @@ private fun MainMenuCard(
     isPrivilegedMissing: Boolean,
     onClick: () -> Unit
 ) {
-    val disabled = isPrivilegedMissing
     val textColor =
-        if (disabled) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f) else MaterialTheme.colorScheme.onSurface
+        if (isPrivilegedMissing) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f) else MaterialTheme.colorScheme.onSurface
     val descColor =
-        if (disabled) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f) else MaterialTheme.colorScheme.onSurfaceVariant
+        if (isPrivilegedMissing) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f) else MaterialTheme.colorScheme.onSurfaceVariant
     val iconTint =
-        if (disabled) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f) else MaterialTheme.colorScheme.onPrimaryContainer
+        if (isPrivilegedMissing) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f) else MaterialTheme.colorScheme.onPrimaryContainer
 
     Card(
-        onClick = { if (!disabled) onClick() },
+        onClick = { if (!isPrivilegedMissing) onClick() },
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(8.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (disabled) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f) else MaterialTheme.colorScheme.surfaceVariant
+            containerColor = if (isPrivilegedMissing) MaterialTheme.colorScheme.surfaceVariant.copy(
+                alpha = 0.6f
+            ) else MaterialTheme.colorScheme.surfaceVariant
         ),
         elevation = CardDefaults.cardElevation(
             defaultElevation = 0.dp,
@@ -536,6 +504,13 @@ private fun MainMenuCard(
                     fontWeight = FontWeight.Medium,
                     color = textColor
                 )
+                if (requirePrivilege && isPrivilegedMissing) {
+                    Text(
+                        text = "需特权",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.tertiary
+                    )
+                }
                 Text(
                     text = description,
                     style = MaterialTheme.typography.bodySmall,
@@ -548,7 +523,9 @@ private fun MainMenuCard(
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                 contentDescription = "进入",
-                tint = if (disabled) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f) else MaterialTheme.colorScheme.onSurfaceVariant,
+                tint = if (isPrivilegedMissing) MaterialTheme.colorScheme.onSurfaceVariant.copy(
+                    alpha = 0.4f
+                ) else MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(24.dp)
             )
         }

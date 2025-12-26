@@ -1,10 +1,11 @@
-package top.expli.bluetoothtester.shizuku
+package top.expli.bluetoothtester.privilege.shizuku
 
 import top.expli.bluetoothtester.BuildConfig
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
+import android.content.pm.PackageManager
 import android.os.IBinder
 import android.util.Log
 import android.widget.Toast
@@ -18,6 +19,8 @@ import rikka.shizuku.Shizuku
 import rikka.shizuku.Shizuku.OnBinderDeadListener
 import rikka.shizuku.Shizuku.OnBinderReceivedListener
 import rikka.shizuku.Shizuku.UserServiceArgs
+import top.expli.bluetoothtester.privilege.PrivilegeHelper
+import top.expli.bluetoothtester.privilege.shizuku.IUserService
 
 
 enum class ShizukuState { NotInstalled, NotRunning, NoPermission, Granted }
@@ -30,8 +33,13 @@ object ShizukuHelper : PrivilegeHelper {
 
     private var userService: IUserService? = null
 
-    private val serviceState = MutableStateFlow(ShizukuServiceState.NotConnected)
-    val serviceStateFlow: StateFlow<ShizukuServiceState> = serviceState.asStateFlow()
+    private val serviceStateFlowInternal = MutableStateFlow(ShizukuServiceState.NotConnected)
+    val serviceStateFlow: StateFlow<ShizukuServiceState> = serviceStateFlowInternal.asStateFlow()
+
+    private val stateFlowInternal = MutableStateFlow(ShizukuState.NotInstalled)
+    val stateFlow: StateFlow<ShizukuState> = stateFlowInternal.asStateFlow()
+
+    private var appContext: Context? = null
 
     private val userServiceArgs: UserServiceArgs = UserServiceArgs(
         ComponentName(
@@ -45,16 +53,17 @@ object ShizukuHelper : PrivilegeHelper {
 
     private val serviceConnection: ServiceConnection = object : ServiceConnection {
         override fun onServiceConnected(componentName: ComponentName?, iBinder: IBinder?) {
+            Log.w(TAG, "onServiceConnected: CONNECTED")
 
             if (iBinder != null && iBinder.pingBinder()) {
                 userService = IUserService.Stub.asInterface(iBinder)
-                serviceState.value = ShizukuServiceState.Connected
+                serviceStateFlowInternal.value = ShizukuServiceState.Connected
             }
         }
 
         override fun onServiceDisconnected(componentName: ComponentName?) {
             userService = null
-            serviceState.value = ShizukuServiceState.NotConnected
+            serviceStateFlowInternal.value = ShizukuServiceState.NotConnected
         }
     }
 
@@ -62,19 +71,33 @@ object ShizukuHelper : PrivilegeHelper {
 
     private val binderListener = object : OnBinderReceivedListener, OnBinderDeadListener {
         override fun onBinderReceived() {
-            // attempt to bind service once binder is available
+            appContext?.let { refreshState(it) }
             bindUserService()
         }
 
         override fun onBinderDead() {
             userService = null
-            serviceState.value = ShizukuServiceState.NotConnected
+            serviceStateFlowInternal.value = ShizukuServiceState.NotConnected
+            appContext?.let { stateFlowInternal.value = currentState(it) }
+        }
+    }
+
+    fun refreshState(context: Context) {
+        val state = currentState(context)
+        stateFlowInternal.value = state
+        if (state == ShizukuState.Granted) {
+            bindUserService()
+        } else {
+            userService = null
+            serviceStateFlowInternal.value = ShizukuServiceState.NotConnected
         }
     }
 
     fun init(context: Context) {
         if (initialized) return
         initialized = true
+        appContext = context.applicationContext
+        refreshState(appContext!!)
         // register callbacks so we react to Shizuku availability changes
         runCatching { Shizuku.addBinderReceivedListener(binderListener) }
         runCatching { Shizuku.addBinderDeadListener(binderListener) }
@@ -85,16 +108,22 @@ object ShizukuHelper : PrivilegeHelper {
     }
 
     private fun bindUserService() {
+        Log.d(TAG, "bindUserService: BIND")
+        if (serviceStateFlowInternal.value == ShizukuServiceState.Binding || serviceStateFlowInternal.value == ShizukuServiceState.Connected) return
         if (!isReadySafe() || !hasPermissionSafe()) {
-            serviceState.value = ShizukuServiceState.NotConnected
+            serviceStateFlowInternal.value = ShizukuServiceState.NotConnected
             return
         }
-        serviceState.value = ShizukuServiceState.Binding
-        runCatching { Shizuku.bindUserService(userServiceArgs, serviceConnection) }
-            .onFailure {
-                Log.w(TAG, "bindUserService failed", it)
-                serviceState.value = ShizukuServiceState.NotConnected
-            }
+        serviceStateFlowInternal.value = ShizukuServiceState.Binding
+        val bound = runCatching {
+            Shizuku.bindUserService(userServiceArgs, serviceConnection)
+            true
+        }.onFailure {
+            Log.w(TAG, "bindUserService failed", it)
+        }.getOrDefault(false)
+        if (!bound) {
+            serviceStateFlowInternal.value = ShizukuServiceState.NotConnected
+        }
     }
 
     fun currentState(context: Context, forcePermission: Boolean? = null): ShizukuState {
@@ -104,12 +133,10 @@ object ShizukuHelper : PrivilegeHelper {
         return if (granted) ShizukuState.Granted else ShizukuState.NoPermission
     }
 
-    fun currentServiceState(): ShizukuServiceState = serviceState.value
-
     fun isReadySafe(): Boolean = runCatching { Shizuku.pingBinder() }.getOrDefault(false)
 
     fun hasPermissionSafe(): Boolean = runCatching {
-        Shizuku.checkSelfPermission() == android.content.pm.PackageManager.PERMISSION_GRANTED
+        Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
     }.getOrDefault(false)
 
     fun requestPermission(callback: (Boolean) -> Unit) {
@@ -127,25 +154,21 @@ object ShizukuHelper : PrivilegeHelper {
             Shizuku.OnRequestPermissionResultListener {
             override fun onRequestPermissionResult(requestCode: Int, grantResult: Int) {
                 if (requestCode == code) {
-                    callback(grantResult == android.content.pm.PackageManager.PERMISSION_GRANTED)
+                    val granted = grantResult == PackageManager.PERMISSION_GRANTED
+                    appContext?.let {
+                        stateFlowInternal.value = currentState(it, forcePermission = granted)
+                        if (granted) {
+                            bindUserService()
+                        } else {
+                            userService = null
+                            serviceStateFlowInternal.value = ShizukuServiceState.NotConnected
+                        }
+                    }
+                    callback(granted)
                     Shizuku.removeRequestPermissionResultListener(this)
                 }
             }
         })
-    }
-
-    fun observeState(context: Context, onChange: (ShizukuState) -> Unit) {
-        val listener = object : Shizuku.OnBinderReceivedListener, Shizuku.OnBinderDeadListener {
-            override fun onBinderReceived() {
-                onChange(currentState(context))
-            }
-
-            override fun onBinderDead() {
-                onChange(currentState(context))
-            }
-        }
-        runCatching { Shizuku.addBinderReceivedListener(listener) }
-        runCatching { Shizuku.addBinderDeadListener(listener) }
     }
 
     fun launchManagerApp(context: Context) {
@@ -161,7 +184,7 @@ object ShizukuHelper : PrivilegeHelper {
 
     fun getService(context: Context): IUserService? {
         if (!hasPermissionSafe()) {
-            Toast.makeText(context, "没有Shizuku权限", Toast.LENGTH_SHORT).show();
+            Toast.makeText(context, "没有Shizuku权限", Toast.LENGTH_SHORT).show()
             return null
         }
 

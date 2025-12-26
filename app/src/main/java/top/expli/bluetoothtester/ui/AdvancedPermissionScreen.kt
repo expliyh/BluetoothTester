@@ -1,4 +1,4 @@
-package top.expli.bluetoothtester
+package top.expli.bluetoothtester.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -32,6 +32,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -43,8 +44,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import top.expli.bluetoothtester.shizuku.ShizukuHelper
-import top.expli.bluetoothtester.shizuku.ShizukuState
+import top.expli.bluetoothtester.privilege.shizuku.ShizukuHelper
+import top.expli.bluetoothtester.privilege.shizuku.ShizukuState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -52,13 +53,10 @@ fun AdvancedPermissionScreen(
     onBackClick: () -> Unit
 ) {
     val context = LocalContext.current
-
-    var shizukuState by remember { mutableStateOf(ShizukuHelper.currentState(context)) }
+    val shizukuState by ShizukuHelper.stateFlow.collectAsState()
 
     LaunchedEffect(Unit) {
-        ShizukuHelper.observeState(context) { newState ->
-            shizukuState = newState
-        }
+        ShizukuHelper.init(context.applicationContext)
     }
 
     Scaffold(
@@ -106,10 +104,7 @@ fun AdvancedPermissionScreen(
                 ShizukuCard(
                     state = shizukuState,
                     onRequestPermission = {
-                        ShizukuHelper.requestPermission { granted ->
-                            shizukuState =
-                                ShizukuHelper.currentState(context, forcePermission = granted)
-                        }
+                        ShizukuHelper.requestPermission { /* stateFlow 会自动更新 */ }
                     },
                     onOpenApp = { ShizukuHelper.launchManagerApp(context) }
                 )
@@ -233,7 +228,6 @@ private fun InfoCard(
     title: String,
     lines: List<String>
 ) {
-    // title varies per call; keep parameter
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),

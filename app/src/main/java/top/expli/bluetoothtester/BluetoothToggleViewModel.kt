@@ -10,9 +10,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import top.expli.bluetoothtester.shizuku.BluetoothState
-import top.expli.bluetoothtester.shizuku.BluetoothToggleController
-import top.expli.bluetoothtester.shizuku.ToggleResult
+import top.expli.bluetoothtester.privilege.shizuku.BluetoothState
+import top.expli.bluetoothtester.privilege.shizuku.BluetoothToggleController
+import top.expli.bluetoothtester.privilege.shizuku.ToggleResult
 
 data class BluetoothToggleUiState(
     val state: BluetoothState = BluetoothState.Unavailable,

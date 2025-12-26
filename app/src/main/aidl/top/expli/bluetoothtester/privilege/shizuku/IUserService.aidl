@@ -1,4 +1,4 @@
-package top.expli.bluetoothtester.shizuku;
+package top.expli.bluetoothtester.privilege.shizuku;
 
 interface IUserService {
     // Destroy method defined by Shizuku server; must use reserved transaction id

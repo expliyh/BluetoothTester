@@ -1,4 +1,4 @@
-package top.expli.bluetoothtester
+package top.expli.bluetoothtester.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -46,7 +46,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import top.expli.bluetoothtester.BluetoothToggleViewModel
-import top.expli.bluetoothtester.shizuku.BluetoothState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
