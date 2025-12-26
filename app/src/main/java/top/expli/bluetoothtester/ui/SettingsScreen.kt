@@ -1,5 +1,6 @@
 package top.expli.bluetoothtester.ui
 
+import android.os.Build
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -26,6 +27,8 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -39,22 +42,26 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import top.expli.bluetoothtester.model.BluetoothToggleViewModel
+
+enum class ThemeOption { System, Light, Dark }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     onBackClick: () -> Unit,
-    onNavigateToAdvancedPermission: () -> Unit
+    onNavigateToAdvancedPermission: () -> Unit,
+    themeOption: ThemeOption,
+    onThemeChange: (ThemeOption) -> Unit,
+    dynamicColorEnabled: Boolean,
+    onDynamicColorChange: (Boolean) -> Unit
 ) {
-    val vm: BluetoothToggleViewModel = viewModel()
-    val uiState by vm.uiState.collectAsState()
+    val dynamicSupported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    val effectiveDynamic = dynamicColorEnabled && dynamicSupported
 
     Scaffold(
         topBar = {
@@ -123,7 +130,23 @@ fun SettingsScreen(
                     icon = Icons.Default.Palette,
                     title = "主题",
                     description = "浅色 / 深色 / 跟随系统",
-                    onClick = { /* TODO: 打开主题选择对话框 */ }
+                    onClick = { }
+                )
+            }
+
+            item {
+                ThemeSelector(current = themeOption, onSelect = onThemeChange)
+            }
+
+            item {
+                SettingsToggleItem(
+                    icon = Icons.Default.Palette,
+                    title = "动态取色",
+                    description = "使用系统壁纸颜色 (Android 12+)",
+                    checked = effectiveDynamic,
+                    enabled = dynamicSupported,
+                    statusText = if (!dynamicSupported) "需要 Android 12+" else null,
+                    onCheckedChange = { onDynamicColorChange(it && dynamicSupported) }
                 )
             }
 
@@ -251,8 +274,10 @@ private fun SettingsToggleItem(
                 onCheckedChange = onCheckedChange,
                 enabled = enabled,
                 colors = SwitchDefaults.colors(
-                    checkedThumbColor = MaterialTheme.colorScheme.primary,
-                    checkedTrackColor = MaterialTheme.colorScheme.primaryContainer
+                    checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                    checkedTrackColor = MaterialTheme.colorScheme.primary,
+                    uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant
                 )
             )
         }
@@ -320,6 +345,47 @@ private fun SettingsClickableItem(
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(24.dp)
             )
+        }
+    }
+}
+
+@Composable
+private fun ThemeSelector(current: ThemeOption, onSelect: (ThemeOption) -> Unit) {
+    val options = listOf(
+        ThemeOption.System to "跟随系统",
+        ThemeOption.Light to "浅色",
+        ThemeOption.Dark to "深色"
+    )
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            options.forEach { (option, label) ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 4.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    RadioButton(
+                        selected = current == option,
+                        onClick = { onSelect(option) },
+                        colors = RadioButtonDefaults.colors(selectedColor = MaterialTheme.colorScheme.primary)
+                    )
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            }
         }
     }
 }

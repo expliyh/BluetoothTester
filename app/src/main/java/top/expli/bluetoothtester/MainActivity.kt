@@ -1,26 +1,20 @@
 package top.expli.bluetoothtester
 
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.core.FastOutLinearInEasing
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -29,25 +23,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.ToggleOn
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.Immutable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.withFrameNanos
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -66,12 +44,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import top.expli.bluetoothtester.model.BluetoothToggleViewModel
 import top.expli.bluetoothtester.privilege.shizuku.ShizukuHelper
-import top.expli.bluetoothtester.privilege.shizuku.ShizukuState
 import top.expli.bluetoothtester.privilege.shizuku.ShizukuServiceState
+import top.expli.bluetoothtester.privilege.shizuku.ShizukuState
 import top.expli.bluetoothtester.ui.AdvancedPermissionScreen
 import top.expli.bluetoothtester.ui.BluetoothToggleScreen
 import top.expli.bluetoothtester.ui.PlaceholderScreen
 import top.expli.bluetoothtester.ui.SettingsScreen
+import top.expli.bluetoothtester.ui.ThemeOption
 import top.expli.bluetoothtester.ui.theme.BluetoothTesterTheme
 
 class MainActivity : ComponentActivity() {
@@ -80,22 +59,36 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            BluetoothTesterTheme {
+            var themeOption by rememberSaveable { mutableStateOf(ThemeOption.System) }
+            var dynamicColorEnabled by rememberSaveable { mutableStateOf(true) }
+            val dynamicColor = dynamicColorEnabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+            val darkTheme = when (themeOption) {
+                ThemeOption.System -> isSystemInDarkTheme()
+                ThemeOption.Light -> false
+                ThemeOption.Dark -> true
+            }
+            BluetoothTesterTheme(darkTheme = darkTheme, dynamicColor = dynamicColor) {
                 LaunchedEffect(Unit) {
-                    withContext(Dispatchers.IO) {
-                        ShizukuHelper.init(
-                            applicationContext
-                        )
-                    }
+                    withContext(Dispatchers.IO) { ShizukuHelper.init(applicationContext) }
                 }
-                AppNavigation()
+                AppNavigation(
+                    themeOption = themeOption,
+                    onThemeChange = { themeOption = it },
+                    dynamicColorEnabled = dynamicColorEnabled,
+                    onDynamicColorChange = { dynamicColorEnabled = it }
+                )
             }
         }
     }
 }
 
 @Composable
-fun AppNavigation() {
+fun AppNavigation(
+    themeOption: ThemeOption,
+    onThemeChange: (ThemeOption) -> Unit,
+    dynamicColorEnabled: Boolean,
+    onDynamicColorChange: (Boolean) -> Unit
+) {
     val navController = rememberNavController()
     var renderFullUi by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
@@ -103,9 +96,11 @@ fun AppNavigation() {
         renderFullUi = true
     }
 
-    // 定义动画参数
-    val animationDuration = 300
-    val slideOffset = 300
+    val animationDurationEnter = 260
+    val animationDurationExit = 200
+    val slideFraction = 3
+
+    val containerColor = MaterialTheme.colorScheme.surface
 
     if (!renderFullUi) {
         Scaffold { inner ->
@@ -113,129 +108,143 @@ fun AppNavigation() {
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(inner)
-                    .background(MaterialTheme.colorScheme.surface)
+                    .background(containerColor)
             )
         }
         return
     }
 
-    NavHost(
-        navController = navController,
-        startDestination = Route.Main,
-        enterTransition = {
-            slideInHorizontally(
-                initialOffsetX = { slideOffset },
-                animationSpec = tween(animationDuration)
-            ) + fadeIn(animationSpec = tween(animationDuration))
-        },
-        exitTransition = {
-            slideOutHorizontally(
-                targetOffsetX = { -slideOffset },
-                animationSpec = tween(animationDuration)
-            ) + fadeOut(animationSpec = tween(animationDuration))
-        },
-        popEnterTransition = {
-            slideInHorizontally(
-                initialOffsetX = { -slideOffset },
-                animationSpec = tween(animationDuration)
-            ) + fadeIn(animationSpec = tween(animationDuration))
-        },
-        popExitTransition = {
-            slideOutHorizontally(
-                targetOffsetX = { slideOffset },
-                animationSpec = tween(animationDuration)
-            ) + fadeOut(animationSpec = tween(animationDuration))
-        }
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(containerColor)
     ) {
-        composable<Route.Main> {
-            MainScreen(
-                onNavigateToSettings = {
-                    navController.navigate(Route.Settings)
-                },
-                onNavigateToScan = {
-                    navController.navigate(Route.Scan)
-                },
-                onNavigateToPaired = {
-                    navController.navigate(Route.PairedDevices)
-                },
-                onNavigateToBleScanner = {
-                    navController.navigate(Route.BleScanner)
-                },
-                onNavigateToClassic = {
-                    navController.navigate(Route.ClassicBluetooth)
-                },
-                onNavigateToBluetoothToggle = {
-                    navController.navigate(Route.BluetoothToggle)
-                }
-            )
-        }
+        NavHost(
+            navController = navController,
+            startDestination = Route.Main,
+            enterTransition = {
+                slideInHorizontally(
+                    initialOffsetX = { it / slideFraction },
+                    animationSpec = tween(
+                        durationMillis = animationDurationEnter,
+                        easing = FastOutSlowInEasing
+                    )
+                ) + fadeIn(
+                    animationSpec = tween(
+                        durationMillis = animationDurationEnter,
+                        easing = FastOutSlowInEasing
+                    ), initialAlpha = 0.2f
+                )
+            },
+            exitTransition = {
+                slideOutHorizontally(
+                    targetOffsetX = { -it / slideFraction },
+                    animationSpec = tween(
+                        durationMillis = animationDurationExit,
+                        easing = FastOutLinearInEasing
+                    )
+                ) + fadeOut(
+                    animationSpec = tween(
+                        durationMillis = animationDurationExit,
+                        easing = FastOutLinearInEasing
+                    )
+                )
+            },
+            popEnterTransition = {
+                slideInHorizontally(
+                    initialOffsetX = { -it / slideFraction },
+                    animationSpec = tween(
+                        durationMillis = animationDurationEnter,
+                        easing = FastOutSlowInEasing
+                    )
+                ) + fadeIn(
+                    animationSpec = tween(
+                        durationMillis = animationDurationEnter,
+                        easing = FastOutSlowInEasing
+                    ), initialAlpha = 0.2f
+                )
+            },
+            popExitTransition = {
+                slideOutHorizontally(
+                    targetOffsetX = { it / slideFraction },
+                    animationSpec = tween(
+                        durationMillis = animationDurationExit,
+                        easing = FastOutLinearInEasing
+                    )
+                ) + fadeOut(
+                    animationSpec = tween(
+                        durationMillis = animationDurationExit,
+                        easing = FastOutLinearInEasing
+                    )
+                )
+            }
+        ) {
+            composable<Route.Main> {
+                MainScreen(
+                    onNavigateToSettings = { navController.navigate(Route.Settings) },
+                    onNavigateToScan = { navController.navigate(Route.Scan) },
+                    onNavigateToPaired = { navController.navigate(Route.PairedDevices) },
+                    onNavigateToBleScanner = { navController.navigate(Route.BleScanner) },
+                    onNavigateToClassic = { navController.navigate(Route.ClassicBluetooth) },
+                    onNavigateToBluetoothToggle = { navController.navigate(Route.BluetoothToggle) }
+                )
+            }
 
-        composable<Route.Settings> {
-            SettingsScreen(
-                onBackClick = {
-                    navController.navigateUp()
-                },
-                onNavigateToAdvancedPermission = {
-                    navController.navigate(Route.AdvancedPermission)
-                }
-            )
-        }
+            composable<Route.Settings> {
+                SettingsScreen(
+                    onBackClick = { navController.navigateUp() },
+                    onNavigateToAdvancedPermission = { navController.navigate(Route.AdvancedPermission) },
+                    themeOption = themeOption,
+                    onThemeChange = onThemeChange,
+                    dynamicColorEnabled = dynamicColorEnabled,
+                    onDynamicColorChange = onDynamicColorChange
+                )
+            }
 
-        // TODO: 添加其他界面的 composable
-        composable<Route.Scan> {
-            PlaceholderScreen(
-                title = "扫描设备",
-                onBackClick = { navController.navigateUp() }
-            )
-        }
+            composable<Route.Scan> {
+                PlaceholderScreen(
+                    title = "扫描设备",
+                    onBackClick = { navController.navigateUp() })
+            }
+            composable<Route.PairedDevices> {
+                PlaceholderScreen(
+                    title = "已配对设备",
+                    onBackClick = { navController.navigateUp() })
+            }
+            composable<Route.BleScanner> {
+                PlaceholderScreen(
+                    title = "BLE 扫描器",
+                    onBackClick = { navController.navigateUp() })
+            }
+            composable<Route.ClassicBluetooth> {
+                PlaceholderScreen(
+                    title = "经典蓝牙",
+                    onBackClick = { navController.navigateUp() })
+            }
 
-        composable<Route.PairedDevices> {
-            PlaceholderScreen(
-                title = "已配对设备",
-                onBackClick = { navController.navigateUp() }
-            )
-        }
+            composable<Route.BluetoothToggle> {
+                val vm: BluetoothToggleViewModel = viewModel()
+                val uiState = vm.uiState.collectAsState()
+                BluetoothToggleScreen(
+                    state = uiState.value.state,
+                    inProgress = uiState.value.inProgress,
+                    lastError = uiState.value.lastError,
+                    loopRunning = uiState.value.loopRunning,
+                    loopIterations = uiState.value.loopIterations,
+                    loopCompleted = uiState.value.loopCompleted,
+                    loopOnDurationMs = uiState.value.loopOnDurationMs,
+                    loopOffDurationMs = uiState.value.loopOffDurationMs,
+                    onToggle = { vm.toggle() },
+                    onStartLoop = { vm.startLoop() },
+                    onStopLoop = { vm.stopLoop() },
+                    onLoopIterationsChange = { vm.updateLoopIterations(it) },
+                    onLoopOnDurationChange = { vm.updateLoopOnDuration(it) },
+                    onLoopOffDurationChange = { vm.updateLoopOffDuration(it) },
+                    onBackClick = { navController.navigateUp() }
+                )
+            }
 
-        composable<Route.BleScanner> {
-            PlaceholderScreen(
-                title = "BLE 扫描器",
-                onBackClick = { navController.navigateUp() }
-            )
-        }
-
-        composable<Route.ClassicBluetooth> {
-            PlaceholderScreen(
-                title = "经典蓝牙",
-                onBackClick = { navController.navigateUp() }
-            )
-        }
-
-        composable<Route.BluetoothToggle> {
-            val vm: BluetoothToggleViewModel = viewModel()
-            val uiState = vm.uiState.collectAsState()
-            BluetoothToggleScreen(
-                state = uiState.value.state,
-                inProgress = uiState.value.inProgress,
-                lastError = uiState.value.lastError,
-                loopRunning = uiState.value.loopRunning,
-                loopIterations = uiState.value.loopIterations,
-                loopCompleted = uiState.value.loopCompleted,
-                loopOnDurationMs = uiState.value.loopOnDurationMs,
-                loopOffDurationMs = uiState.value.loopOffDurationMs,
-                onToggle = { vm.toggle() },
-                onStartLoop = { vm.startLoop() },
-                onStopLoop = { vm.stopLoop() },
-                onLoopIterationsChange = { vm.updateLoopIterations(it) },
-                onLoopOnDurationChange = { vm.updateLoopOnDuration(it) },
-                onLoopOffDurationChange = { vm.updateLoopOffDuration(it) },
-                onBackClick = { navController.navigateUp() }
-            )
-        }
-
-        composable<Route.AdvancedPermission> {
-            AdvancedPermissionScreen(
-                onBackClick = { navController.navigateUp() }
-            )
+            composable<Route.AdvancedPermission> { AdvancedPermissionScreen(onBackClick = { navController.navigateUp() }) }
         }
     }
 }
@@ -268,11 +277,7 @@ private fun MainScreen(
         withFrameNanos { }
         renderMain = true
     }
-    LaunchedEffect(context) {
-        val appCtx = context.applicationContext
-        // init 已在 Activity onCreate 调用，collectAsState 可自动获得状态
-        ShizukuHelper.init(appCtx)
-    }
+    LaunchedEffect(context) { ShizukuHelper.init(context.applicationContext) }
     val resolvedShizukuState = shizukuState
 
     val menuItems = remember {
@@ -306,8 +311,7 @@ private fun MainScreen(
     }
 
     Scaffold(
-        modifier = Modifier
-            .fillMaxSize(),
+        modifier = Modifier.fillMaxSize(),
         topBar = {
             TopAppBar(
                 title = {
@@ -349,10 +353,7 @@ private fun MainScreen(
                 )
             }
 
-            items(
-                items = menuItems,
-                key = { it.id }
-            ) { item ->
+            items(items = menuItems, key = { it.id }) { item ->
                 MainMenuCard(
                     title = item.title,
                     description = item.description,
@@ -374,9 +375,7 @@ private fun MainScreen(
                 )
             }
 
-            item {
-                Spacer(modifier = Modifier.height(16.dp))
-            }
+            item { Spacer(modifier = Modifier.height(16.dp)) }
         }
     }
 }
@@ -393,7 +392,8 @@ private fun ShizukuStatusChip(permissionState: ShizukuState, serviceState: Shizu
                 ShizukuState.NoPermission -> "特权: 未授权"
                 ShizukuState.NotRunning -> "特权: 未运行"
                 ShizukuState.NotInstalled -> "特权: 未安装"
-            }, color = when (permissionState) {
+            },
+            color = when (permissionState) {
                 ShizukuState.Granted -> MaterialTheme.colorScheme.primary
                 ShizukuState.NoPermission -> MaterialTheme.colorScheme.tertiary
                 ShizukuState.NotRunning -> MaterialTheme.colorScheme.error
@@ -406,7 +406,8 @@ private fun ShizukuStatusChip(permissionState: ShizukuState, serviceState: Shizu
                 ShizukuServiceState.Connected -> "服务: 已连接"
                 ShizukuServiceState.Binding -> "服务: 连接中"
                 ShizukuServiceState.NotConnected -> "服务: 未连接"
-            }, color = when (serviceState) {
+            },
+            color = when (serviceState) {
                 ShizukuServiceState.Connected -> MaterialTheme.colorScheme.primary
                 ShizukuServiceState.Binding -> MaterialTheme.colorScheme.secondary
                 ShizukuServiceState.NotConnected -> MaterialTheme.colorScheme.error
@@ -456,10 +457,7 @@ private fun MainMenuCard(
                 alpha = 0.6f
             ) else MaterialTheme.colorScheme.surfaceVariant
         ),
-        elevation = CardDefaults.cardElevation(
-            defaultElevation = 0.dp,
-            pressedElevation = 0.dp
-        )
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp, pressedElevation = 0.dp)
     ) {
         Row(
             modifier = Modifier
@@ -531,16 +529,11 @@ private fun MainMenuCard(
 
 @Composable
 fun Greeting(name: String, modifier: Modifier = Modifier) {
-    Text(
-        text = "Hello $name!",
-        modifier = modifier
-    )
+    Text(text = "Hello $name!", modifier = modifier)
 }
 
 @Preview(showBackground = true)
 @Composable
 fun GreetingPreview() {
-    BluetoothTesterTheme {
-        Greeting("Android")
-    }
+    BluetoothTesterTheme { Greeting("Android") }
 }
