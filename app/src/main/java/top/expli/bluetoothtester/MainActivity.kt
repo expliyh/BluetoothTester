@@ -41,7 +41,9 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.withContext
+import top.expli.bluetoothtester.data.SettingsStore
 import top.expli.bluetoothtester.model.BluetoothToggleViewModel
 import top.expli.bluetoothtester.privilege.shizuku.ShizukuHelper
 import top.expli.bluetoothtester.privilege.shizuku.ShizukuServiceState
@@ -62,6 +64,13 @@ class MainActivity : ComponentActivity() {
         setContent {
             var themeOption by rememberSaveable { mutableStateOf(ThemeOption.System) }
             var dynamicColorEnabled by rememberSaveable { mutableStateOf(true) }
+            val appCtx = applicationContext
+            LaunchedEffect(Unit) {
+                SettingsStore.observe(appCtx).distinctUntilChanged().collect { s ->
+                    themeOption = s.theme
+                    dynamicColorEnabled = s.dynamicColorEnabled
+                }
+            }
             val dynamicColor = dynamicColorEnabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
             val darkTheme = when (themeOption) {
                 ThemeOption.System -> isSystemInDarkTheme()
@@ -69,6 +78,12 @@ class MainActivity : ComponentActivity() {
                 ThemeOption.Dark -> true
             }
             AnimatedBluetoothTesterTheme(darkTheme = darkTheme, dynamicColor = dynamicColor) {
+                LaunchedEffect(themeOption) {
+                    SettingsStore.updateTheme(appCtx, themeOption)
+                }
+                LaunchedEffect(dynamicColorEnabled) {
+                    SettingsStore.updateDynamic(appCtx, dynamicColorEnabled)
+                }
                 LaunchedEffect(Unit) {
                     withContext(Dispatchers.IO) { ShizukuHelper.init(applicationContext) }
                 }
