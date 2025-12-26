@@ -59,6 +59,9 @@ android {
     }
     buildFeatures {
         compose = true
+        viewBinding = true
+        buildConfig = true
+        aidl = true
     }
 }
 
@@ -77,7 +80,10 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.shizuku.api)
+    implementation("androidx.compose.runtime:runtime-tracing")
     implementation(libs.shizuku.provider)
+    implementation(libs.libsu.core)
+    compileOnly(libs.shizuku.runtime)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

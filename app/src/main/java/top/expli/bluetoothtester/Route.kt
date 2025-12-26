@@ -24,4 +24,7 @@ sealed interface Route {
 
     @Serializable
     data object AdvancedPermission : Route
+
+    @Serializable
+    data object BluetoothToggle : Route
 }

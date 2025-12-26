@@ -1,17 +1,101 @@
 package top.expli.bluetoothtester.shizuku
 
-import android.content.ActivityNotFoundException
+import top.expli.bluetoothtester.BuildConfig
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
+import android.content.ServiceConnection
+import android.os.IBinder
 import android.util.Log
+import android.widget.Toast
+import androidx.core.net.toUri
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import rikka.shizuku.Shizuku
+import rikka.shizuku.Shizuku.OnBinderDeadListener
+import rikka.shizuku.Shizuku.OnBinderReceivedListener
+import rikka.shizuku.Shizuku.UserServiceArgs
+
 
 enum class ShizukuState { NotInstalled, NotRunning, NoPermission, Granted }
 
-object ShizukuHelper {
+enum class ShizukuServiceState { NotConnected, Binding, Connected }
+
+object ShizukuHelper : PrivilegeHelper {
     private const val TAG = "ShizukuHelper"
     private const val PKG = "moe.shizuku.privileged.api"
+
+    private var userService: IUserService? = null
+
+    private val serviceState = MutableStateFlow(ShizukuServiceState.NotConnected)
+    val serviceStateFlow: StateFlow<ShizukuServiceState> = serviceState.asStateFlow()
+
+    private val userServiceArgs: UserServiceArgs = UserServiceArgs(
+        ComponentName(
+            BuildConfig.APPLICATION_ID, UserService::class.java.getName()
+        )
+    )
+        .daemon(false)
+        .processNameSuffix("adb_service")
+        .debuggable(BuildConfig.DEBUG)
+        .version(BuildConfig.VERSION_CODE)
+
+    private val serviceConnection: ServiceConnection = object : ServiceConnection {
+        override fun onServiceConnected(componentName: ComponentName?, iBinder: IBinder?) {
+
+            if (iBinder != null && iBinder.pingBinder()) {
+                userService = IUserService.Stub.asInterface(iBinder)
+                serviceState.value = ShizukuServiceState.Connected
+            }
+        }
+
+        override fun onServiceDisconnected(componentName: ComponentName?) {
+            userService = null
+            serviceState.value = ShizukuServiceState.NotConnected
+        }
+    }
+
+    private var initialized = false
+
+    private val binderListener = object : OnBinderReceivedListener, OnBinderDeadListener {
+        override fun onBinderReceived() {
+            // attempt to bind service once binder is available
+            bindUserService()
+        }
+
+        override fun onBinderDead() {
+            userService = null
+            serviceState.value = ShizukuServiceState.NotConnected
+        }
+    }
+
+    fun init(context: Context) {
+        if (initialized) return
+        initialized = true
+        // register callbacks so we react to Shizuku availability changes
+        runCatching { Shizuku.addBinderReceivedListener(binderListener) }
+        runCatching { Shizuku.addBinderDeadListener(binderListener) }
+        // if already ready and permitted, bind immediately
+        if (isReadySafe() && hasPermissionSafe()) {
+            bindUserService()
+        }
+    }
+
+    private fun bindUserService() {
+        if (!isReadySafe() || !hasPermissionSafe()) {
+            serviceState.value = ShizukuServiceState.NotConnected
+            return
+        }
+        serviceState.value = ShizukuServiceState.Binding
+        runCatching { Shizuku.bindUserService(userServiceArgs, serviceConnection) }
+            .onFailure {
+                Log.w(TAG, "bindUserService failed", it)
+                serviceState.value = ShizukuServiceState.NotConnected
+            }
+    }
 
     fun currentState(context: Context, forcePermission: Boolean? = null): ShizukuState {
         if (!isInstalled(context)) return ShizukuState.NotInstalled
@@ -19,6 +103,8 @@ object ShizukuHelper {
         val granted = forcePermission ?: hasPermissionSafe()
         return if (granted) ShizukuState.Granted else ShizukuState.NoPermission
     }
+
+    fun currentServiceState(): ShizukuServiceState = serviceState.value
 
     fun isReadySafe(): Boolean = runCatching { Shizuku.pingBinder() }.getOrDefault(false)
 
@@ -65,7 +151,7 @@ object ShizukuHelper {
     fun launchManagerApp(context: Context) {
         val intent = Intent().apply {
             action = Intent.ACTION_VIEW
-            data = Uri.parse("package:$PKG")
+            data = "package:$PKG".toUri()
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         runCatching { context.startActivity(intent) }.onFailure { e: Throwable ->
@@ -73,10 +159,43 @@ object ShizukuHelper {
         }
     }
 
+    fun getService(context: Context): IUserService? {
+        if (!hasPermissionSafe()) {
+            Toast.makeText(context, "没有Shizuku权限", Toast.LENGTH_SHORT).show();
+            return null
+        }
+
+        if (userService != null) {
+            return userService
+        }
+
+        bindUserService()
+        return null
+    }
+
     private fun isInstalled(context: Context): Boolean = try {
         context.packageManager.getPackageInfo(PKG, 0)
         true
     } catch (_: Throwable) {
         false
+    }
+
+    override suspend fun runCmd(
+        context: Context,
+        command: String
+    ): CommandResult = withContext(Dispatchers.IO) {
+        val service = getService(context)
+            ?: return@withContext CommandResult(false, error = "Shizuku 服务未连接或未授权")
+        return@withContext try {
+            val output = service.runShellCommand(command)
+            val exit = if (output.startsWith("exit=")) output.substringAfter("exit=")
+                .substringBefore('\n').toIntOrNull() else 0
+            CommandResult(
+                exit == 0,
+                exitCode = exit.takeIf { it != 0 },
+                error = output.takeIf { exit != 0 })
+        } catch (e: Exception) {
+            CommandResult(false, error = e.message ?: e.toString())
+        }
     }
 }

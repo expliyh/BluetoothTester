@@ -34,16 +34,19 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import top.expli.bluetoothtester.shizuku.ShizukuHelper
+import top.expli.bluetoothtester.BluetoothToggleViewModel
+import top.expli.bluetoothtester.shizuku.BluetoothState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -51,6 +54,9 @@ fun SettingsScreen(
     onBackClick: () -> Unit,
     onNavigateToAdvancedPermission: () -> Unit
 ) {
+    val vm: BluetoothToggleViewModel = viewModel()
+    val uiState by vm.uiState.collectAsState()
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -183,6 +189,8 @@ private fun SettingsToggleItem(
     title: String,
     description: String,
     checked: Boolean,
+    enabled: Boolean = true,
+    statusText: String? = null,
     onCheckedChange: (Boolean) -> Unit
 ) {
     Card(
@@ -230,11 +238,19 @@ private fun SettingsToggleItem(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                statusText?.let {
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.tertiary
+                    )
+                }
             }
 
             Switch(
                 checked = checked,
                 onCheckedChange = onCheckedChange,
+                enabled = enabled,
                 colors = SwitchDefaults.colors(
                     checkedThumbColor = MaterialTheme.colorScheme.primary,
                     checkedTrackColor = MaterialTheme.colorScheme.primaryContainer
