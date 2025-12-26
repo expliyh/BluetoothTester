@@ -55,99 +55,99 @@ fun AdvancedPermissionScreen(
     val context = LocalContext.current
     val shizukuState by ShizukuHelper.stateFlow.collectAsState()
 
-    LaunchedEffect(Unit) {
-        ShizukuHelper.init(context.applicationContext)
-    }
-
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = "高级权限",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Medium
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBackClick) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "返回"
+    Surface(color = MaterialTheme.colorScheme.surface) {
+        Scaffold(
+            containerColor = Color.Transparent,
+            topBar = {
+                TopAppBar(
+                    title = {
+                        Text(
+                            text = "高级权限",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Medium
                         )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                )
-            )
-        }
-    ) { innerPadding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            item {
-                Text(
-                    text = "Shizuku",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(start = 4.dp, bottom = 4.dp)
-                )
-            }
-
-            item {
-                ShizukuCard(
-                    state = shizukuState,
-                    onRequestPermission = {
-                        ShizukuHelper.requestPermission { /* stateFlow 会自动更新 */ }
                     },
-                    onOpenApp = { ShizukuHelper.launchManagerApp(context) }
-                )
-            }
-
-            item {
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "Root / ADB (预留)",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(start = 4.dp, bottom = 4.dp)
-                )
-            }
-
-            item {
-                PlaceholderCard(
-                    icon = Icons.Default.Build,
-                    title = "Root 支持",
-                    description = "计划中：通过 root 运行需要的命令"
-                )
-            }
-
-            item {
-                PlaceholderCard(
-                    icon = Icons.Default.BugReport,
-                    title = "ADB 支持",
-                    description = "计划中：通过 adb 授权执行命令"
-                )
-            }
-
-            item {
-                Spacer(modifier = Modifier.height(16.dp))
-                InfoCard(
-                    icon = Icons.Default.Info,
-                    title = "说明",
-                    lines = listOf(
-                        "仅支持 Shizuku v11+",
-                        "未安装或未运行时将提示前往管理器",
-                        "撤销授权请在 Shizuku 管理器中操作"
+                    navigationIcon = {
+                        IconButton(onClick = onBackClick) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "返回"
+                            )
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Transparent,
+                        scrolledContainerColor = Color.Transparent
                     )
                 )
+            }
+        ) { innerPadding ->
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                item {
+                    Text(
+                        text = "Shizuku",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(start = 4.dp, bottom = 4.dp)
+                    )
+                }
+
+                item {
+                    ShizukuCard(
+                        state = shizukuState,
+                        onRequestPermission = {
+                            ShizukuHelper.requestPermission { /* stateFlow 会自动更新 */ }
+                        },
+                        onOpenApp = { ShizukuHelper.launchManagerApp(context) }
+                    )
+                }
+
+                item {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Root / ADB (预留)",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(start = 4.dp, bottom = 4.dp)
+                    )
+                }
+
+                item {
+                    PlaceholderCard(
+                        icon = Icons.Default.Build,
+                        title = "Root 支持",
+                        description = "计划中：通过 root 运行需要的命令"
+                    )
+                }
+
+                item {
+                    PlaceholderCard(
+                        icon = Icons.Default.BugReport,
+                        title = "ADB 支持",
+                        description = "计划中：通过 adb 授权执行命令"
+                    )
+                }
+
+                item {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    InfoCard(
+                        icon = Icons.Default.Info,
+                        title = "说明",
+                        lines = listOf(
+                            "仅支持 Shizuku v11+",
+                            "未安装或未运行时将提示前往管理器",
+                            "撤销授权请在 Shizuku 管理器中操作"
+                        )
+                    )
+                }
             }
         }
     }

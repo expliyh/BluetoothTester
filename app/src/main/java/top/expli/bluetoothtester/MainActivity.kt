@@ -51,6 +51,7 @@ import top.expli.bluetoothtester.ui.BluetoothToggleScreen
 import top.expli.bluetoothtester.ui.PlaceholderScreen
 import top.expli.bluetoothtester.ui.SettingsScreen
 import top.expli.bluetoothtester.ui.ThemeOption
+import top.expli.bluetoothtester.ui.theme.AnimatedBluetoothTesterTheme
 import top.expli.bluetoothtester.ui.theme.BluetoothTesterTheme
 
 class MainActivity : ComponentActivity() {
@@ -67,7 +68,7 @@ class MainActivity : ComponentActivity() {
                 ThemeOption.Light -> false
                 ThemeOption.Dark -> true
             }
-            BluetoothTesterTheme(darkTheme = darkTheme, dynamicColor = dynamicColor) {
+            AnimatedBluetoothTesterTheme(darkTheme = darkTheme, dynamicColor = dynamicColor) {
                 LaunchedEffect(Unit) {
                     withContext(Dispatchers.IO) { ShizukuHelper.init(applicationContext) }
                 }

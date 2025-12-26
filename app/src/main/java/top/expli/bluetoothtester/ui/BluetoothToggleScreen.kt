@@ -1,7 +1,15 @@
 package top.expli.bluetoothtester.ui
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -19,6 +27,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -30,6 +39,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -55,183 +65,188 @@ fun BluetoothToggleScreen(
     onBackClick: () -> Unit
 ) {
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("蓝牙开关", fontWeight = FontWeight.SemiBold) },
-                navigationIcon = {
-                    IconButton(onClick = onBackClick) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "返回"
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                )
-            )
-        }
-    ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp)
-        ) {
-            val on = state == BluetoothState.On || state == BluetoothState.TurningOn
-            val icon = if (on) Icons.Default.Bluetooth else Icons.Default.BluetoothDisabled
-            val statusText = when (state) {
-                BluetoothState.On -> "已开启"
-                BluetoothState.Off -> "已关闭"
-                BluetoothState.TurningOn -> "正在开启…"
-                BluetoothState.TurningOff -> "正在关闭…"
-                BluetoothState.Unavailable -> "设备不支持或无适配器"
-            }
-            val statusColor = when (state) {
-                BluetoothState.On -> MaterialTheme.colorScheme.primary
-                BluetoothState.Off -> MaterialTheme.colorScheme.onSurfaceVariant
-                BluetoothState.TurningOn, BluetoothState.TurningOff -> MaterialTheme.colorScheme.secondary
-                BluetoothState.Unavailable -> MaterialTheme.colorScheme.error
-            }
-
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(20.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(88.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primaryContainer),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (inProgress) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(32.dp),
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                        } else {
+    val surfaceColor = MaterialTheme.colorScheme.surface
+    Surface(color = surfaceColor) {
+        Scaffold(
+            containerColor = Color.Transparent,
+            topBar = {
+                TopAppBar(
+                    title = { Text("蓝牙开关", fontWeight = FontWeight.SemiBold) },
+                    navigationIcon = {
+                        IconButton(onClick = onBackClick) {
                             Icon(
-                                imageVector = icon,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                modifier = Modifier.size(44.dp)
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "返回"
                             )
                         }
-                    }
-
-                    Text(
-                        text = statusText,
-                        style = MaterialTheme.typography.titleLarge,
-                        color = statusColor,
-                        textAlign = TextAlign.Center
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Transparent,
+                        scrolledContainerColor = Color.Transparent
                     )
+                )
+            }
+        ) { innerPadding ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(20.dp)
+            ) {
+                val on = state == BluetoothState.On || state == BluetoothState.TurningOn
+                val icon = if (on) Icons.Default.Bluetooth else Icons.Default.BluetoothDisabled
+                val statusText = when (state) {
+                    BluetoothState.On -> "已开启"
+                    BluetoothState.Off -> "已关闭"
+                    BluetoothState.TurningOn -> "正在开启…"
+                    BluetoothState.TurningOff -> "正在关闭…"
+                    BluetoothState.Unavailable -> "设备不支持或无适配器"
+                }
+                val statusColor = when (state) {
+                    BluetoothState.On -> MaterialTheme.colorScheme.primary
+                    BluetoothState.Off -> MaterialTheme.colorScheme.onSurfaceVariant
+                    BluetoothState.TurningOn, BluetoothState.TurningOff -> MaterialTheme.colorScheme.secondary
+                    BluetoothState.Unavailable -> MaterialTheme.colorScheme.error
+                }
 
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        AssistChip(
-                            onClick = {},
-                            label = { Text(if (on) "当前: 开" else "当前: 关") })
-                        AssistChip(
-                            onClick = {},
-                            label = { Text(if (loopRunning) "循环中" else "单次模式") })
-                    }
-
-                    if (lastError != null) {
-                        Text(
-                            text = lastError,
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Button(
-                            onClick = onToggle,
-                            enabled = !inProgress && !loopRunning && state != BluetoothState.Unavailable
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(20.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(88.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primaryContainer),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Text(if (on) "立即关闭" else "立即开启")
+                            if (inProgress) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(32.dp),
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                            } else {
+                                Icon(
+                                    imageVector = icon,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.size(44.dp)
+                                )
+                            }
                         }
-                        OutlinedButton(onClick = { onBackClick() }) {
-                            Text("返回")
+
+                        Text(
+                            text = statusText,
+                            style = MaterialTheme.typography.titleLarge,
+                            color = statusColor,
+                            textAlign = TextAlign.Center
+                        )
+
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            AssistChip(
+                                onClick = {},
+                                label = { Text(if (on) "当前: 开" else "当前: 关") })
+                            AssistChip(
+                                onClick = {},
+                                label = { Text(if (loopRunning) "循环中" else "单次模式") })
+                        }
+
+                        if (lastError != null) {
+                            Text(
+                                text = lastError,
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Button(
+                                onClick = onToggle,
+                                enabled = !inProgress && !loopRunning && state != BluetoothState.Unavailable
+                            ) {
+                                Text(if (on) "立即关闭" else "立即开启")
+                            }
+                            OutlinedButton(onClick = { onBackClick() }) {
+                                Text("返回")
+                            }
                         }
                     }
                 }
-            }
 
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                 ) {
-                    Text(
-                        "循环开关设置",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
-                    )
-
-                    NumberField(
-                        label = "循环次数",
-                        value = loopIterations,
-                        suffix = "次",
-                        onValueChange = { onLoopIterationsChange(it) }
-                    )
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            NumberField(
-                                label = "开启保持",
-                                value = (loopOnDurationMs / 1000).toInt(),
-                                suffix = "秒",
-                                onValueChange = { onLoopOnDurationChange(it.toLong() * 1000) }
-                            )
-                        }
-                        Column(modifier = Modifier.weight(1f)) {
-                            NumberField(
-                                label = "关闭保持",
-                                value = (loopOffDurationMs / 1000).toInt(),
-                                suffix = "秒",
-                                onValueChange = { onLoopOffDurationChange(it.toLong() * 1000) }
-                            )
-                        }
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Button(
-                            onClick = onStartLoop,
-                            enabled = !loopRunning && !inProgress && loopIterations > 0 && state != BluetoothState.Unavailable
-                        ) { Text("开始循环") }
-
-                        OutlinedButton(
-                            onClick = onStopLoop,
-                            enabled = loopRunning
-                        ) { Text("停止") }
-
-                        Spacer(modifier = Modifier.weight(1f))
                         Text(
-                            "已完成: $loopCompleted/${loopIterations.coerceAtLeast(1)}",
-                            style = MaterialTheme.typography.bodyMedium
+                            "循环开关设置",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold
                         )
+
+                        NumberField(
+                            label = "循环次数",
+                            value = loopIterations,
+                            suffix = "次",
+                            onValueChange = { onLoopIterationsChange(it) }
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                NumberField(
+                                    label = "开启保持",
+                                    value = (loopOnDurationMs / 1000).toInt(),
+                                    suffix = "秒",
+                                    onValueChange = { onLoopOnDurationChange(it.toLong() * 1000) }
+                            )
+                            }
+                            Column(modifier = Modifier.weight(1f)) {
+                                NumberField(
+                                    label = "关闭保持",
+                                    value = (loopOffDurationMs / 1000).toInt(),
+                                    suffix = "秒",
+                                    onValueChange = { onLoopOffDurationChange(it.toLong() * 1000) }
+                            )
+                            }
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Button(
+                                onClick = onStartLoop,
+                                enabled = !loopRunning && !inProgress && loopIterations > 0 && state != BluetoothState.Unavailable
+                            ) { Text("开始循环") }
+
+                            OutlinedButton(
+                                onClick = onStopLoop,
+                                enabled = loopRunning
+                            ) { Text("停止") }
+
+                            Spacer(modifier = Modifier.weight(1f))
+                            Text(
+                                "已完成: $loopCompleted/${loopIterations.coerceAtLeast(1)}",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
                     }
                 }
             }
