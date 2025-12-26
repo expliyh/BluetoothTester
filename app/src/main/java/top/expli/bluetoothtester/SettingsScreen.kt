@@ -1,7 +1,5 @@
 package top.expli.bluetoothtester
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -45,11 +43,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import top.expli.bluetoothtester.shizuku.ShizukuHelper
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
-    onBackClick: () -> Unit
+    onBackClick: () -> Unit,
+    onNavigateToAdvancedPermission: () -> Unit
 ) {
     Scaffold(
         topBar = {
@@ -133,6 +133,15 @@ fun SettingsScreen(
                     title = "权限管理",
                     description = "查看和管理应用权限",
                     onClick = { /* TODO: 打开权限管理 */ }
+                )
+            }
+
+            item {
+                SettingsClickableItem(
+                    icon = Icons.Default.Security,
+                    title = "高级权限",
+                    description = "Shizuku / Root / ADB",
+                    onClick = onNavigateToAdvancedPermission
                 )
             }
 
@@ -299,4 +308,3 @@ private fun SettingsClickableItem(
         }
     }
 }
-

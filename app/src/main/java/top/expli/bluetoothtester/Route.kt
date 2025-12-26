@@ -21,5 +21,7 @@ sealed interface Route {
 
     @Serializable
     data object ClassicBluetooth : Route
-}
 
+    @Serializable
+    data object AdvancedPermission : Route
+}

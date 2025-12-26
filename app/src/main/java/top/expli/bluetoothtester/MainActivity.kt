@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.BluetoothSearching
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.Scanner
@@ -131,6 +132,9 @@ fun AppNavigation() {
             SettingsScreen(
                 onBackClick = {
                     navController.navigateUp()
+                },
+                onNavigateToAdvancedPermission = {
+                    navController.navigate(Route.AdvancedPermission)
                 }
             )
         }
@@ -160,6 +164,12 @@ fun AppNavigation() {
         composable<Route.ClassicBluetooth> {
             PlaceholderScreen(
                 title = "经典蓝牙",
+                onBackClick = { navController.navigateUp() }
+            )
+        }
+
+        composable<Route.AdvancedPermission> {
+            AdvancedPermissionScreen(
                 onBackClick = { navController.navigateUp() }
             )
         }
