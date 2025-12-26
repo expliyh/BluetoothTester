@@ -45,7 +45,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import top.expli.bluetoothtester.BluetoothToggleViewModel
+import top.expli.bluetoothtester.model.BluetoothToggleViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

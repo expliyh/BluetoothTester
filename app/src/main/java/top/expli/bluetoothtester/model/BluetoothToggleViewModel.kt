@@ -1,10 +1,11 @@
-package top.expli.bluetoothtester
+package top.expli.bluetoothtester.model
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -99,7 +100,7 @@ class BluetoothToggleViewModel(app: Application) : AndroidViewModel(app) {
                         // 在循环内部，仅在两次切换之间等待
                         val isLastToggleOfCycle = stepIdx == toggleTargets.lastIndex
                         val holdMs = if (targetOn) onMs else offMs
-                        if (!isLastToggleOfCycle && holdMs > 0) kotlinx.coroutines.delay(holdMs)
+                        if (!isLastToggleOfCycle && holdMs > 0) delay(holdMs)
                     }
 
                     // 先计数，再做下一循环前的等待
@@ -109,7 +110,7 @@ class BluetoothToggleViewModel(app: Application) : AndroidViewModel(app) {
                         val holdAfterCycle = if (initialOn) onMs else offMs
                         if (holdAfterCycle > 0) {
                             ensureActive()
-                            kotlinx.coroutines.delay(holdAfterCycle)
+                            delay(holdAfterCycle)
                         }
                     }
                 }
