@@ -5,13 +5,6 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.animation.core.FastOutLinearInEasing
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
@@ -52,7 +45,9 @@ import top.expli.bluetoothtester.ui.AdvancedPermissionScreen
 import top.expli.bluetoothtester.ui.BluetoothToggleScreen
 import top.expli.bluetoothtester.ui.PlaceholderScreen
 import top.expli.bluetoothtester.ui.SettingsScreen
+import top.expli.bluetoothtester.ui.SppScreen
 import top.expli.bluetoothtester.ui.ThemeOption
+import top.expli.bluetoothtester.ui.navigation.AppNavTransitions
 import top.expli.bluetoothtester.ui.theme.AnimatedBluetoothTesterTheme
 import top.expli.bluetoothtester.ui.theme.BluetoothTesterTheme
 
@@ -112,10 +107,6 @@ fun AppNavigation(
         renderFullUi = true
     }
 
-    val animationDurationEnter = 260
-    val animationDurationExit = 200
-    val slideFraction = 3
-
     val containerColor = MaterialTheme.colorScheme.surface
 
     if (!renderFullUi) {
@@ -138,62 +129,10 @@ fun AppNavigation(
         NavHost(
             navController = navController,
             startDestination = Route.Main,
-            enterTransition = {
-                slideInHorizontally(
-                    initialOffsetX = { it / slideFraction },
-                    animationSpec = tween(
-                        durationMillis = animationDurationEnter,
-                        easing = FastOutSlowInEasing
-                    )
-                ) + fadeIn(
-                    animationSpec = tween(
-                        durationMillis = animationDurationEnter,
-                        easing = FastOutSlowInEasing
-                    ), initialAlpha = 0.2f
-                )
-            },
-            exitTransition = {
-                slideOutHorizontally(
-                    targetOffsetX = { -it / slideFraction },
-                    animationSpec = tween(
-                        durationMillis = animationDurationExit,
-                        easing = FastOutLinearInEasing
-                    )
-                ) + fadeOut(
-                    animationSpec = tween(
-                        durationMillis = animationDurationExit,
-                        easing = FastOutLinearInEasing
-                    )
-                )
-            },
-            popEnterTransition = {
-                slideInHorizontally(
-                    initialOffsetX = { -it / slideFraction },
-                    animationSpec = tween(
-                        durationMillis = animationDurationEnter,
-                        easing = FastOutSlowInEasing
-                    )
-                ) + fadeIn(
-                    animationSpec = tween(
-                        durationMillis = animationDurationEnter,
-                        easing = FastOutSlowInEasing
-                    ), initialAlpha = 0.2f
-                )
-            },
-            popExitTransition = {
-                slideOutHorizontally(
-                    targetOffsetX = { it / slideFraction },
-                    animationSpec = tween(
-                        durationMillis = animationDurationExit,
-                        easing = FastOutLinearInEasing
-                    )
-                ) + fadeOut(
-                    animationSpec = tween(
-                        durationMillis = animationDurationExit,
-                        easing = FastOutLinearInEasing
-                    )
-                )
-            }
+            enterTransition = AppNavTransitions.enter,
+            exitTransition = AppNavTransitions.exit,
+            popEnterTransition = AppNavTransitions.popEnter,
+            popExitTransition = AppNavTransitions.popExit
         ) {
             composable<Route.Main> {
                 MainScreen(
@@ -202,6 +141,7 @@ fun AppNavigation(
                     onNavigateToPaired = { navController.navigate(Route.PairedDevices) },
                     onNavigateToBleScanner = { navController.navigate(Route.BleScanner) },
                     onNavigateToClassic = { navController.navigate(Route.ClassicBluetooth) },
+                    onNavigateToSpp = { navController.navigate(Route.Spp) },
                     onNavigateToBluetoothToggle = { navController.navigate(Route.BluetoothToggle) }
                 )
             }
@@ -236,6 +176,12 @@ fun AppNavigation(
                 PlaceholderScreen(
                     title = "经典蓝牙",
                     onBackClick = { navController.navigateUp() })
+            }
+
+            composable<Route.Spp> {
+                SppScreen(
+                    onBackClick = { navController.navigateUp() }
+                )
             }
 
             composable<Route.BluetoothToggle> {
@@ -283,6 +229,7 @@ private fun MainScreen(
     onNavigateToPaired: () -> Unit = {},
     onNavigateToBleScanner: () -> Unit = {},
     onNavigateToClassic: () -> Unit = {},
+    onNavigateToSpp: () -> Unit = {},
     onNavigateToBluetoothToggle: () -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -304,6 +251,12 @@ private fun MainScreen(
                 description = "通过 Shizuku 控制蓝牙开关",
                 icon = Icons.Default.ToggleOn,
                 requirePrivilege = true
+            ),
+            MenuItem(
+                id = "spp",
+                title = "SPP 工具",
+                description = "多设备注册、连接、收发",
+                icon = Icons.AutoMirrored.Filled.KeyboardArrowRight
             ),
             MenuItem(
                 id = "settings",
@@ -384,6 +337,7 @@ private fun MainScreen(
                             "paired" -> onNavigateToPaired()
                             "ble_scanner" -> onNavigateToBleScanner()
                             "classic_bluetooth" -> onNavigateToClassic()
+                            "spp" -> onNavigateToSpp()
                             "bluetooth_toggle" -> onNavigateToBluetoothToggle()
                             "settings" -> onNavigateToSettings()
                         }
