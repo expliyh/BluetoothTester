@@ -47,6 +47,7 @@ fun SppScreen(onBackClick: () -> Unit) {
     val vm: SppViewModel = viewModel()
     val state by vm.uiState.collectAsState()
     val latestState by rememberUpdatedState(state)
+    val selectedSession = state.selectedKey?.let { state.sessions[it] }
     var showAddDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val activity = context as? Activity
@@ -129,8 +130,8 @@ fun SppScreen(onBackClick: () -> Unit) {
         }
     }
 
-    LaunchedEffect(state.lastError) {
-        state.lastError?.let { msg ->
+    LaunchedEffect(selectedSession?.lastError) {
+        selectedSession?.lastError?.let { msg ->
             snackbarHostState.showSnackbar("错误: $msg")
         }
     }
@@ -146,7 +147,7 @@ fun SppScreen(onBackClick: () -> Unit) {
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
-            val selected = state.selected
+            val selected = selectedSession?.device
             TopAppBar(
                 title = {
                     if (!inDetail || selected == null) {
@@ -189,7 +190,15 @@ fun SppScreen(onBackClick: () -> Unit) {
                             Icon(Icons.Default.Add, contentDescription = "注册 Socket")
                         }
                     } else {
-                        AssistChip(onClick = {}, label = { Text(state.connectionState.label()) })
+                        AssistChip(
+                            onClick = {},
+                            label = {
+                                Text(
+                                    (selectedSession?.connectionState
+                                        ?: SppConnectionState.Idle).label()
+                                )
+                            }
+                        )
                     }
                 }
             )
@@ -224,7 +233,7 @@ fun SppScreen(onBackClick: () -> Unit) {
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(inner),
-                    state = state,
+                    sessionState = selectedSession,
                     onTextChange = { vm.updateSendingText(it) },
                     onPayloadChange = { vm.updatePayloadSize(it) },
                     onSend = { vm.sendOnce() },
@@ -232,7 +241,8 @@ fun SppScreen(onBackClick: () -> Unit) {
                     onParseIncomingAsTextChange = { vm.updateParseIncomingAsText(it) },
                     onToggleConnection = {
                         val active =
-                            state.connectionState == SppConnectionState.Connected || state.connectionState == SppConnectionState.Listening
+                            latestState.selectedKey?.let { latestState.sessions[it] }?.connectionState == SppConnectionState.Connected ||
+                                    latestState.selectedKey?.let { latestState.sessions[it] }?.connectionState == SppConnectionState.Listening
                         if (active) {
                             vm.disconnect()
                         } else {
@@ -242,7 +252,9 @@ fun SppScreen(onBackClick: () -> Unit) {
                     onClearChat = { vm.clearChat() },
                     onConnectFromBondedDevice = {
                         requestBondedDevicePick { picked ->
-                            val selected = latestState.selected ?: return@requestBondedDevicePick
+                            val selected =
+                                latestState.selectedKey?.let { latestState.sessions[it] }?.device
+                                    ?: return@requestBondedDevicePick
                             val pickedName = picked.name.ifBlank { picked.address }
                             val resolvedName =
                                 if (selected.name.isBlank() || selected.name == selected.address) pickedName else selected.name

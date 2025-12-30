@@ -41,9 +41,8 @@ sealed interface SppConnectionState {
 }
 
 @Serializable
-data class SppUiState(
-    val registered: List<SppDevice> = emptyList(),
-    val selected: SppDevice? = null,
+data class SppSession(
+    val device: SppDevice,
     val connectionState: SppConnectionState = SppConnectionState.Idle,
     val lastError: String? = null,
     val chat: List<SppChatItem> = emptyList(),
@@ -59,4 +58,11 @@ data class SppUiState(
     val speedTestTxAvgBps: Double? = null,
     val speedTestRxAvgBps: Double? = null,
     val speedTestSamples: List<SppSpeedSample> = emptyList()
+)
+
+@Serializable
+data class SppUiState(
+    val registered: List<SppDevice> = emptyList(),
+    val selectedKey: String? = null,
+    val sessions: Map<String, SppSession> = emptyMap()
 )

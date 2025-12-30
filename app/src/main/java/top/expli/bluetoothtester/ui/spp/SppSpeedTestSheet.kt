@@ -23,13 +23,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import top.expli.bluetoothtester.model.SppConnectionState
+import top.expli.bluetoothtester.model.SppSession
 import top.expli.bluetoothtester.model.SppSpeedSample
-import top.expli.bluetoothtester.model.SppUiState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SppSpeedTestSheet(
-    state: SppUiState,
+    session: SppSession,
     onDismissRequest: () -> Unit,
     onToggleSpeedTest: () -> Unit,
     modifier: Modifier = Modifier
@@ -52,51 +52,49 @@ fun SppSpeedTestSheet(
                 Text("SPP 测速", style = MaterialTheme.typography.titleMedium)
                 AssistChip(
                     onClick = {},
-                    label = { Text(if (state.speedTestRunning) "测速中" else "已停止") }
+                    label = { Text(if (session.speedTestRunning) "测速中" else "已停止") }
                 )
             }
 
             val canOperate =
-                state.connectionState == SppConnectionState.Connected || state.speedTestRunning
+                session.connectionState == SppConnectionState.Connected || session.speedTestRunning
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = onToggleSpeedTest, enabled = canOperate) {
-                    Text(if (state.speedTestRunning) "停止" else "开始")
+                    Text(if (session.speedTestRunning) "停止" else "开始")
                 }
                 TextButton(onClick = onDismissRequest) { Text("关闭") }
             }
 
             Divider()
 
-            val selected = state.selected
-            if (selected != null) {
-                ListItem(
-                    headlineContent = { Text(selected.name) },
-                    supportingContent = {
-                        Text(
-                            if (selected.address.isBlank()) selected.uuid else selected.address,
-                            fontFamily = FontFamily.Monospace
-                        )
-                    }
-                )
-            }
+            val selected = session.device
+            ListItem(
+                headlineContent = { Text(selected.name) },
+                supportingContent = {
+                    Text(
+                        if (selected.address.isBlank()) selected.uuid else selected.address,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+            )
 
             SpeedSummary(
                 title = "发送",
-                instantBps = state.speedTestTxInstantBps,
-                avgBps = state.speedTestTxAvgBps,
-                totalBytes = state.speedTestTxTotalBytes
+                instantBps = session.speedTestTxInstantBps,
+                avgBps = session.speedTestTxAvgBps,
+                totalBytes = session.speedTestTxTotalBytes
             )
             SpeedSummary(
                 title = "接收",
-                instantBps = state.speedTestRxInstantBps,
-                avgBps = state.speedTestRxAvgBps,
-                totalBytes = state.speedTestRxTotalBytes
+                instantBps = session.speedTestRxInstantBps,
+                avgBps = session.speedTestRxAvgBps,
+                totalBytes = session.speedTestRxTotalBytes
             )
             ListItem(
                 headlineContent = { Text("时长") },
                 supportingContent = {
                     Text(
-                        formatElapsedMs(state.speedTestElapsedMs),
+                        formatElapsedMs(session.speedTestElapsedMs),
                         fontFamily = FontFamily.Monospace
                     )
                 }
@@ -105,7 +103,7 @@ fun SppSpeedTestSheet(
             Divider()
 
             Text("速度记录（最新在前）", style = MaterialTheme.typography.titleSmall)
-            SpeedSampleList(state.speedTestSamples)
+            SpeedSampleList(session.speedTestSamples)
         }
     }
 }
@@ -205,4 +203,3 @@ private fun formatElapsedMs(ms: Long): String {
     val seconds = ms / 1000.0
     return "%.1fs".format(seconds)
 }
-

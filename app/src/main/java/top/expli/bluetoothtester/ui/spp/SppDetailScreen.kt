@@ -61,13 +61,13 @@ import top.expli.bluetoothtester.model.SppChatDirection
 import top.expli.bluetoothtester.model.SppChatItem
 import top.expli.bluetoothtester.model.SppConnectionState
 import top.expli.bluetoothtester.model.SppRole
-import top.expli.bluetoothtester.model.SppUiState
+import top.expli.bluetoothtester.model.SppSession
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SppDetailScreen(
     modifier: Modifier = Modifier,
-    state: SppUiState,
+    sessionState: SppSession?,
     onTextChange: (String) -> Unit,
     onPayloadChange: (Int) -> Unit,
     onSend: () -> Unit,
@@ -77,13 +77,14 @@ fun SppDetailScreen(
     onClearChat: () -> Unit,
     onConnectFromBondedDevice: () -> Unit = {}
 ) {
-    val selected = state.selected
-    if (selected == null) {
+    val session = sessionState
+    if (session == null) {
         Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text("未选择 Socket", style = MaterialTheme.typography.titleMedium)
         }
         return
     }
+    val selected = session.device
 
     var showActions by remember { mutableStateOf(false) }
     var showPayloadDialog by remember { mutableStateOf(false) }
@@ -100,7 +101,7 @@ fun SppDetailScreen(
         val composerHeightDp = with(density) { composerHeightPx.toDp() }
 
         Box(modifier = Modifier.fillMaxSize()) {
-            if (state.chat.isEmpty()) {
+            if (session.chat.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text("暂无消息", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
@@ -116,7 +117,7 @@ fun SppDetailScreen(
                     ),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(state.chat, key = { it.id }) { item ->
+                    items(session.chat, key = { it.id }) { item ->
                         ChatLine(item)
                     }
                 }
@@ -134,15 +135,15 @@ fun SppDetailScreen(
             ) {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     if (
-                        state.speedTestRunning ||
-                        state.speedTestTxAvgBps != null ||
-                        state.speedTestRxAvgBps != null
+                        session.speedTestRunning ||
+                        session.speedTestTxAvgBps != null ||
+                        session.speedTestRxAvgBps != null
                     ) {
-                        val title = if (state.speedTestRunning) "测速中" else "上次测速"
-                        val txInstant = state.speedTestTxInstantBps?.let(::formatBps) ?: "--"
-                        val txAvg = state.speedTestTxAvgBps?.let(::formatBps) ?: "--"
-                        val rxInstant = state.speedTestRxInstantBps?.let(::formatBps) ?: "--"
-                        val rxAvg = state.speedTestRxAvgBps?.let(::formatBps) ?: "--"
+                        val title = if (session.speedTestRunning) "测速中" else "上次测速"
+                        val txInstant = session.speedTestTxInstantBps?.let(::formatBps) ?: "--"
+                        val txAvg = session.speedTestTxAvgBps?.let(::formatBps) ?: "--"
+                        val rxInstant = session.speedTestRxInstantBps?.let(::formatBps) ?: "--"
+                        val rxAvg = session.speedTestRxAvgBps?.let(::formatBps) ?: "--"
                         Text(
                             "$title · TX $txInstant / $txAvg · RX $rxInstant / $rxAvg",
                             style = MaterialTheme.typography.labelSmall,
@@ -166,18 +167,18 @@ fun SppDetailScreen(
                         }
 
                         OutlinedTextField(
-                            value = state.sendingText,
+                            value = session.sendingText,
                             onValueChange = onTextChange,
                             modifier = Modifier.weight(1f),
                             placeholder = { Text("输入…") },
                             maxLines = 4
                         )
 
-                        val speedTesting = state.speedTestRunning
+                        val speedTesting = session.speedTestRunning
                         LongPressIconButton(
                             icon = if (speedTesting) Icons.Default.Stop else Icons.Default.Send,
                             contentDescription = if (speedTesting) "停止测速" else "发送",
-                            enabled = speedTesting || state.connectionState == SppConnectionState.Connected,
+                            enabled = speedTesting || session.connectionState == SppConnectionState.Connected,
                             onClick = if (speedTesting) onToggleSpeedTest else onSend,
                             onLongClick = {
                                 showSpeedTestSheet = true
@@ -195,8 +196,8 @@ fun SppDetailScreen(
             onDismissRequest = { showActions = false }
         ) {
             val active =
-                state.connectionState == SppConnectionState.Connected || state.connectionState == SppConnectionState.Listening
-            val connecting = state.connectionState == SppConnectionState.Connecting
+                session.connectionState == SppConnectionState.Connected || session.connectionState == SppConnectionState.Listening
+            val connecting = session.connectionState == SppConnectionState.Connecting
             val connectTitle = when (selected.role) {
                 SppRole.Client -> if (active) "断开连接" else "连接"
                 SppRole.Server -> if (active) "停止监听" else "开始监听"
@@ -209,7 +210,7 @@ fun SppDetailScreen(
 
             ListItem(
                 headlineContent = { Text(connectTitle) },
-                supportingContent = { Text("状态: ${state.connectionState.label()}") },
+                supportingContent = { Text("状态: ${session.connectionState.label()}") },
                 leadingContent = { Icon(connectIcon, contentDescription = null) },
                 modifier = Modifier.padding(horizontal = 6.dp),
                 trailingContent = {
@@ -238,13 +239,13 @@ fun SppDetailScreen(
             ListItem(
                 headlineContent = { Text("解析接收数据") },
                 supportingContent = {
-                    Text(if (state.parseIncomingAsText) "UTF-8 文本（非文本则显示 HEX）" else "HEX 原始数据")
+                    Text(if (session.parseIncomingAsText) "UTF-8 文本（非文本则显示 HEX）" else "HEX 原始数据")
                 },
                 leadingContent = { Icon(Icons.Default.TextFields, contentDescription = null) },
                 modifier = Modifier.padding(horizontal = 6.dp),
                 trailingContent = {
                     Switch(
-                        checked = state.parseIncomingAsText,
+                        checked = session.parseIncomingAsText,
                         onCheckedChange = onParseIncomingAsTextChange
                     )
                 }
@@ -277,7 +278,7 @@ fun SppDetailScreen(
 
             ListItem(
                 headlineContent = { Text("接收缓冲大小") },
-                supportingContent = { Text("${state.payloadSize} 字节") },
+                supportingContent = { Text("${session.payloadSize} 字节") },
                 leadingContent = { Icon(Icons.Default.Tune, contentDescription = null) },
                 modifier = Modifier.padding(horizontal = 6.dp),
                 trailingContent = {
@@ -326,7 +327,7 @@ fun SppDetailScreen(
     }
 
     if (showPayloadDialog) {
-        var input by remember { mutableStateOf(state.payloadSize.toString()) }
+        var input by remember { mutableStateOf(session.payloadSize.toString()) }
         AlertDialog(
             onDismissRequest = { showPayloadDialog = false },
             title = { Text("接收缓冲大小") },
@@ -350,7 +351,7 @@ fun SppDetailScreen(
 
     if (showSpeedTestSheet) {
         SppSpeedTestSheet(
-            state = state,
+            session = session,
             onDismissRequest = { showSpeedTestSheet = false },
             onToggleSpeedTest = onToggleSpeedTest
         )

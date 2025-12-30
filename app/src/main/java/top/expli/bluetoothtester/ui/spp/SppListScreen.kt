@@ -74,7 +74,7 @@ fun SppListScreen(
         } else {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 items(state.registered, key = { it.uniqueKey() }) { dev ->
-                    val selected = state.selected?.uniqueKey() == dev.uniqueKey()
+                    val selected = state.selectedKey == dev.uniqueKey()
 
                     val containerColor by animateColorAsState(
                         targetValue = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
