@@ -63,7 +63,8 @@ fun SppDetailScreen(
     onPayloadChange: (Int) -> Unit,
     onSend: () -> Unit,
     onToggleConnection: () -> Unit,
-    onClearChat: () -> Unit
+    onClearChat: () -> Unit,
+    onConnectFromBondedDevice: () -> Unit = {}
 ) {
     val selected = state.selected
     if (selected == null) {
@@ -182,6 +183,30 @@ fun SppDetailScreen(
                 }
             )
             Divider()
+
+            if (selected.role == SppRole.Client) {
+                ListItem(
+                    headlineContent = { Text("从已绑定设备连接") },
+                    supportingContent = { Text("从系统已配对设备选择") },
+                    leadingContent = {
+                        Icon(
+                            Icons.Default.BluetoothSearching,
+                            contentDescription = null
+                        )
+                    },
+                    modifier = Modifier.padding(horizontal = 6.dp),
+                    trailingContent = {
+                        TextButton(
+                            onClick = {
+                                showActions = false
+                                onConnectFromBondedDevice()
+                            },
+                            enabled = !connecting && !active
+                        ) { Text("选择") }
+                    }
+                )
+                Divider()
+            }
 
             ListItem(
                 headlineContent = { Text("接收缓冲大小") },

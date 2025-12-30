@@ -3,7 +3,7 @@ package top.expli.bluetoothtester.model
 import android.Manifest
 import android.app.Application
 import android.bluetooth.BluetoothAdapter
-import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothManager
 import androidx.annotation.RequiresPermission
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -26,7 +26,8 @@ import top.expli.bluetoothtester.model.SppRole
 
 class SppViewModel(app: Application) : AndroidViewModel(app) {
     private val ctx = app.applicationContext
-    private val adapter: BluetoothAdapter? = ctx.getSystemService(BluetoothAdapter::class.java)
+    private val adapter: BluetoothAdapter? =
+        ctx.getSystemService(BluetoothManager::class.java)?.adapter
 
     private val _uiState = MutableStateFlow(SppUiState())
     val uiState: StateFlow<SppUiState> = _uiState.asStateFlow()

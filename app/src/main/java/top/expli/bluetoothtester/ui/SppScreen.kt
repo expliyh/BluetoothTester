@@ -1,9 +1,12 @@
 package top.expli.bluetoothtester.ui
 
+import android.annotation.SuppressLint
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import android.app.Activity
+import android.bluetooth.BluetoothManager
+import android.content.Context
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.fillMaxSize
@@ -30,6 +33,8 @@ import top.expli.bluetoothtester.ui.spp.SppListScreen
 import top.expli.bluetoothtester.ui.spp.SppDetailScreen
 import top.expli.bluetoothtester.ui.spp.SppRoute
 import top.expli.bluetoothtester.ui.spp.AddSppDeviceDialog
+import top.expli.bluetoothtester.ui.spp.BondedDeviceItem
+import top.expli.bluetoothtester.ui.spp.BondedDevicePickerSheet
 import top.expli.bluetoothtester.ui.spp.uniqueKey
 import top.expli.bluetoothtester.ui.spp.label
 import top.expli.bluetoothtester.model.SppConnectionState
@@ -41,6 +46,7 @@ import androidx.compose.ui.text.style.TextOverflow
 fun SppScreen(onBackClick: () -> Unit) {
     val vm: SppViewModel = viewModel()
     val state by vm.uiState.collectAsState()
+    val latestState by rememberUpdatedState(state)
     var showAddDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val activity = context as? Activity
@@ -50,6 +56,9 @@ fun SppScreen(onBackClick: () -> Unit) {
     var showPermissionRationaleDialog by remember { mutableStateOf(false) }
     var showPermissionSettingsDialog by remember { mutableStateOf(false) }
     var pendingBluetoothAction by remember { mutableStateOf<(() -> Unit)?>(null) }
+    var showBondedDevicePicker by remember { mutableStateOf(false) }
+    var bondedDevices by remember { mutableStateOf<List<BondedDeviceItem>>(emptyList()) }
+    var bondedDevicePickerOnSelect by remember { mutableStateOf<((BondedDeviceItem) -> Unit)?>(null) }
 
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
@@ -83,6 +92,40 @@ fun SppScreen(onBackClick: () -> Unit) {
             showPermissionRationaleDialog = true
         } else {
             bluetoothPermissionLauncher.launch(BluetoothPermissions.required)
+        }
+    }
+
+    fun requestBondedDevicePick(onPicked: (BondedDeviceItem) -> Unit) {
+        ensureBluetoothPermissions {
+            val result = runCatching { loadBondedDeviceItems(context) }.getOrElse {
+                scope.launch {
+                    snackbarHostState.showSnackbar(
+                        "读取已绑定设备失败: ${it.message ?: it::class.java.simpleName}"
+                    )
+                }
+                return@ensureBluetoothPermissions
+            }
+            when (result) {
+                is BondedDeviceLoadResult.Success -> {
+                    if (result.devices.isEmpty()) {
+                        scope.launch {
+                            snackbarHostState.showSnackbar("未找到已绑定设备，请先在系统蓝牙设置中配对")
+                        }
+                    } else {
+                        bondedDevices = result.devices
+                        bondedDevicePickerOnSelect = onPicked
+                        showBondedDevicePicker = true
+                    }
+                }
+
+                BondedDeviceLoadResult.BluetoothDisabled -> scope.launch {
+                    snackbarHostState.showSnackbar("蓝牙未开启，请先开启蓝牙")
+                }
+
+                BondedDeviceLoadResult.BluetoothUnavailable -> scope.launch {
+                    snackbarHostState.showSnackbar("本机蓝牙不可用")
+                }
+            }
         }
     }
 
@@ -194,7 +237,21 @@ fun SppScreen(onBackClick: () -> Unit) {
                             ensureBluetoothPermissions { vm.connect() }
                         }
                     },
-                    onClearChat = { vm.clearChat() }
+                    onClearChat = { vm.clearChat() },
+                    onConnectFromBondedDevice = {
+                        requestBondedDevicePick { picked ->
+                            val selected = latestState.selected ?: return@requestBondedDevicePick
+                            val pickedName = picked.name.ifBlank { picked.address }
+                            val resolvedName =
+                                if (selected.name.isBlank() || selected.name == selected.address) pickedName else selected.name
+                            val updated =
+                                selected.copy(name = resolvedName, address = picked.address)
+                            ensureBluetoothPermissions {
+                                vm.select(updated)
+                                vm.connect()
+                            }
+                        }
+                    }
                 )
             }
         }
@@ -206,6 +263,9 @@ fun SppScreen(onBackClick: () -> Unit) {
             onConfirm = { device ->
                 vm.addOrUpdate(device)
                 showAddDialog = false
+            },
+            onPickBondedDevice = { onPicked ->
+                requestBondedDevicePick(onPicked)
             }
         )
     }
@@ -253,4 +313,51 @@ fun SppScreen(onBackClick: () -> Unit) {
             }
         )
     }
+
+    if (showBondedDevicePicker) {
+        BondedDevicePickerSheet(
+            devices = bondedDevices,
+            onDismissRequest = {
+                showBondedDevicePicker = false
+                bondedDevicePickerOnSelect = null
+            },
+            onSelect = { picked ->
+                showBondedDevicePicker = false
+                val cb = bondedDevicePickerOnSelect
+                bondedDevicePickerOnSelect = null
+                cb?.invoke(picked)
+            }
+        )
+    }
+}
+
+private sealed interface BondedDeviceLoadResult {
+    data class Success(val devices: List<BondedDeviceItem>) : BondedDeviceLoadResult
+    data object BluetoothDisabled : BondedDeviceLoadResult
+    data object BluetoothUnavailable : BondedDeviceLoadResult
+}
+
+@SuppressLint("MissingPermission")
+private fun loadBondedDeviceItems(context: Context): BondedDeviceLoadResult {
+    val adapter = context.getSystemService(BluetoothManager::class.java)?.adapter
+        ?: return BondedDeviceLoadResult.BluetoothUnavailable
+    if (!adapter.isEnabled) return BondedDeviceLoadResult.BluetoothDisabled
+    val devices = adapter.bondedDevices ?: emptySet()
+    return devices
+        .asSequence()
+        .map { dev ->
+            val name = runCatching { dev.name }.getOrNull().orEmpty()
+            BondedDeviceItem(
+                name = name,
+                address = dev.address
+            )
+        }
+        .filter { it.address.isNotBlank() }
+        .distinctBy { it.address }
+        .sortedWith(
+            compareBy<BondedDeviceItem> { it.name.ifBlank { it.address }.lowercase() }
+                .thenBy { it.address }
+        )
+        .toList()
+        .let { BondedDeviceLoadResult.Success(it) }
 }

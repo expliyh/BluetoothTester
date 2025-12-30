@@ -13,6 +13,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BluetoothSearching
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.AssistChipDefaults
@@ -230,7 +231,11 @@ private fun RoleChip(role: SppRole, selected: Boolean) {
 }
 
 @Composable
-fun AddSppDeviceDialog(onDismiss: () -> Unit, onConfirm: (SppDevice) -> Unit) {
+fun AddSppDeviceDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (SppDevice) -> Unit,
+    onPickBondedDevice: ((onPicked: (BondedDeviceItem) -> Unit) -> Unit) = {}
+) {
     var name by remember { mutableStateOf("") }
     var addr by remember { mutableStateOf("") }
     var uuid by remember { mutableStateOf(SppDevice.DEFAULT_SPP_UUID) }
@@ -271,7 +276,23 @@ fun AddSppDeviceDialog(onDismiss: () -> Unit, onConfirm: (SppDevice) -> Unit) {
                     OutlinedTextField(
                         value = addr,
                         onValueChange = { addr = it },
-                        label = { Text("地址（必填）") })
+                        label = { Text("地址（必填）") },
+                        trailingIcon = {
+                            IconButton(onClick = {
+                                onPickBondedDevice { picked ->
+                                    addr = picked.address
+                                    if (name.isBlank() && picked.name.isNotBlank()) {
+                                        name = picked.name
+                                    }
+                                }
+                            }) {
+                                Icon(
+                                    Icons.Default.BluetoothSearching,
+                                    contentDescription = "从已绑定设备选择"
+                                )
+                            }
+                        }
+                    )
                 }
                 OutlinedTextField(
                     value = note,
