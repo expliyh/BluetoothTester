@@ -57,6 +57,9 @@ class SppViewModel(app: Application) : AndroidViewModel(app) {
     fun updatePayloadSize(size: Int) =
         _uiState.update { it.copy(payloadSize = size.coerceAtLeast(1)) }
 
+    fun updateParseIncomingAsText(enabled: Boolean) =
+        _uiState.update { it.copy(parseIncomingAsText = enabled) }
+
     fun clearChat() = _uiState.update { it.copy(chat = emptyList(), lastError = null) }
 
     fun select(device: SppDevice) {
@@ -349,8 +352,8 @@ class SppViewModel(app: Application) : AndroidViewModel(app) {
                 val buf = mgr.receive(_uiState.value.payloadSize)
                 if (buf == null) break
                 if (buf.isNotEmpty()) {
-                    val hex = buf.joinToString(" ") { b -> "%02X".format(b) }
-                    appendChat(SppChatDirection.In, hex)
+                    val text = formatIncoming(buf, _uiState.value.parseIncomingAsText)
+                    appendChat(SppChatDirection.In, text)
                 } else {
                     delay(10)
                 }
@@ -373,6 +376,23 @@ class SppViewModel(app: Application) : AndroidViewModel(app) {
         }
         return String.format(Locale.US, "%.2f %s", value, units[unitIndex])
     }
+
+    private fun formatIncoming(bytes: ByteArray, parseAsText: Boolean): String {
+        if (!parseAsText) return bytes.toHexString()
+
+        val text =
+            runCatching { bytes.toString(Charsets.UTF_8) }.getOrNull() ?: return bytes.toHexString()
+        if (text.isBlank()) return bytes.toHexString()
+
+        val bad = text.count { ch ->
+            ch == '\uFFFD' || (ch.code < 0x20 && ch != '\n' && ch != '\r' && ch != '\t') || ch.code == 0x7F
+        }
+        val ratio = bad.toDouble() / text.length.coerceAtLeast(1)
+        return if (ratio <= 0.15) text else bytes.toHexString()
+    }
+
+    private fun ByteArray.toHexString(): String =
+        joinToString(" ") { b -> "%02X".format(b.toInt() and 0xFF) }
 
     override fun onCleared() {
         super.onCleared()

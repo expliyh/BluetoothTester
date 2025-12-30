@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.BluetoothSearching
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.AlertDialog
@@ -35,6 +36,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -70,6 +72,7 @@ fun SppDetailScreen(
     onPayloadChange: (Int) -> Unit,
     onSend: () -> Unit,
     onToggleSpeedTest: () -> Unit,
+    onParseIncomingAsTextChange: (Boolean) -> Unit,
     onToggleConnection: () -> Unit,
     onClearChat: () -> Unit,
     onConnectFromBondedDevice: () -> Unit = {}
@@ -228,6 +231,22 @@ fun SppDetailScreen(
                         showActions = false
                         showSpeedTestSheet = true
                     }) { Text("打开") }
+                }
+            )
+            Divider()
+
+            ListItem(
+                headlineContent = { Text("解析接收数据") },
+                supportingContent = {
+                    Text(if (state.parseIncomingAsText) "UTF-8 文本（非文本则显示 HEX）" else "HEX 原始数据")
+                },
+                leadingContent = { Icon(Icons.Default.TextFields, contentDescription = null) },
+                modifier = Modifier.padding(horizontal = 6.dp),
+                trailingContent = {
+                    Switch(
+                        checked = state.parseIncomingAsText,
+                        onCheckedChange = onParseIncomingAsTextChange
+                    )
                 }
             )
             Divider()

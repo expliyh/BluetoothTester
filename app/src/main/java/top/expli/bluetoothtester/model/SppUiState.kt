@@ -49,6 +49,7 @@ data class SppUiState(
     val chat: List<SppChatItem> = emptyList(),
     val sendingText: String = "",
     val payloadSize: Int = 256,
+    val parseIncomingAsText: Boolean = true,
     val speedTestRunning: Boolean = false,
     val speedTestElapsedMs: Long = 0L,
     val speedTestTxTotalBytes: Long = 0L,

@@ -229,6 +229,7 @@ fun SppScreen(onBackClick: () -> Unit) {
                     onPayloadChange = { vm.updatePayloadSize(it) },
                     onSend = { vm.sendOnce() },
                     onToggleSpeedTest = { ensureBluetoothPermissions { vm.toggleSpeedTest() } },
+                    onParseIncomingAsTextChange = { vm.updateParseIncomingAsText(it) },
                     onToggleConnection = {
                         val active =
                             state.connectionState == SppConnectionState.Connected || state.connectionState == SppConnectionState.Listening
