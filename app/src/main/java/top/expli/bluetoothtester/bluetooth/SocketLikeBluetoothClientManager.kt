@@ -127,8 +127,11 @@ abstract class SocketLikeBluetoothClientManager(
         val inp = input ?: return null
         if (maxBytes <= 0) return null
         return try {
-            val buf = ByteArray(maxBytes)
-            val read = inp.read(buf)
+            val available = inp.available()
+            if (available <= 0) return ByteArray(0)
+            val toRead = minOf(maxBytes, available)
+            val buf = ByteArray(toRead)
+            val read = inp.read(buf, 0, toRead)
             when {
                 read == -1 -> {
                     disconnect()

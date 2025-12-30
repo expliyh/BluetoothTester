@@ -12,6 +12,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BluetoothSearching
@@ -26,6 +30,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
@@ -39,8 +44,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -62,6 +69,7 @@ fun SppDetailScreen(
     onTextChange: (String) -> Unit,
     onPayloadChange: (Int) -> Unit,
     onSend: () -> Unit,
+    onToggleSpeedTest: () -> Unit,
     onToggleConnection: () -> Unit,
     onClearChat: () -> Unit,
     onConnectFromBondedDevice: () -> Unit = {}
@@ -76,6 +84,7 @@ fun SppDetailScreen(
 
     var showActions by remember { mutableStateOf(false) }
     var showPayloadDialog by remember { mutableStateOf(false) }
+    var showSpeedTestSheet by remember { mutableStateOf(false) }
 
     Surface(
         modifier = modifier.fillMaxSize(),
@@ -121,6 +130,26 @@ fun SppDetailScreen(
                     .onSizeChanged { composerHeightPx = it.height }
             ) {
                 Column(modifier = Modifier.fillMaxWidth()) {
+                    if (
+                        state.speedTestRunning ||
+                        state.speedTestTxAvgBps != null ||
+                        state.speedTestRxAvgBps != null
+                    ) {
+                        val title = if (state.speedTestRunning) "测速中" else "上次测速"
+                        val txInstant = state.speedTestTxInstantBps?.let(::formatBps) ?: "--"
+                        val txAvg = state.speedTestTxAvgBps?.let(::formatBps) ?: "--"
+                        val rxInstant = state.speedTestRxInstantBps?.let(::formatBps) ?: "--"
+                        val rxAvg = state.speedTestRxAvgBps?.let(::formatBps) ?: "--"
+                        Text(
+                            "$title · TX $txInstant / $txAvg · RX $rxInstant / $rxAvg",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { showSpeedTestSheet = true }
+                                .padding(horizontal = 12.dp, vertical = 6.dp)
+                        )
+                    }
                     Divider()
                     Row(
                         modifier = Modifier
@@ -141,12 +170,17 @@ fun SppDetailScreen(
                             maxLines = 4
                         )
 
-                        IconButton(
-                            onClick = onSend,
-                            enabled = state.connectionState == SppConnectionState.Connected
-                        ) {
-                            Icon(Icons.Default.Send, contentDescription = "发送")
-                        }
+                        val speedTesting = state.speedTestRunning
+                        LongPressIconButton(
+                            icon = if (speedTesting) Icons.Default.Stop else Icons.Default.Send,
+                            contentDescription = if (speedTesting) "停止测速" else "发送",
+                            enabled = speedTesting || state.connectionState == SppConnectionState.Connected,
+                            onClick = if (speedTesting) onToggleSpeedTest else onSend,
+                            onLongClick = {
+                                showSpeedTestSheet = true
+                                if (!speedTesting) onToggleSpeedTest()
+                            }
+                        )
                     }
                 }
             }
@@ -180,6 +214,20 @@ fun SppDetailScreen(
                         showActions = false
                         onToggleConnection()
                     }, enabled = !connecting) { Text(if (active) "停止" else "开始") }
+                }
+            )
+            Divider()
+
+            ListItem(
+                headlineContent = { Text("测速窗口") },
+                supportingContent = { Text("记录发送/接收速度") },
+                leadingContent = { Icon(Icons.Default.Tune, contentDescription = null) },
+                modifier = Modifier.padding(horizontal = 6.dp),
+                trailingContent = {
+                    TextButton(onClick = {
+                        showActions = false
+                        showSpeedTestSheet = true
+                    }) { Text("打开") }
                 }
             )
             Divider()
@@ -280,6 +328,14 @@ fun SppDetailScreen(
             dismissButton = { TextButton(onClick = { showPayloadDialog = false }) { Text("取消") } }
         )
     }
+
+    if (showSpeedTestSheet) {
+        SppSpeedTestSheet(
+            state = state,
+            onDismissRequest = { showSpeedTestSheet = false },
+            onToggleSpeedTest = onToggleSpeedTest
+        )
+    }
 }
 
 @Composable
@@ -311,4 +367,47 @@ private fun ChatLine(item: SppChatItem) {
             modifier = Modifier.fillMaxWidth(0.92f)
         )
     }
+}
+
+@Composable
+private fun LongPressIconButton(
+    icon: ImageVector,
+    contentDescription: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    Box(
+        modifier = modifier
+            .size(48.dp)
+            .clip(CircleShape)
+            .combinedClickable(
+                enabled = enabled,
+                interactionSource = interactionSource,
+                indication = null,
+                onLongClick = onLongClick,
+                onClick = onClick
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        val alpha = if (enabled) 1f else 0.38f
+        Icon(
+            icon,
+            contentDescription = contentDescription,
+            tint = LocalContentColor.current.copy(alpha = alpha)
+        )
+    }
+}
+
+private fun formatBps(bps: Double): String {
+    val units = arrayOf("B/s", "KB/s", "MB/s", "GB/s")
+    var value = bps
+    var unitIndex = 0
+    while (value >= 1024 && unitIndex < units.lastIndex) {
+        value /= 1024
+        unitIndex++
+    }
+    return "%.2f %s".format(value, units[unitIndex])
 }

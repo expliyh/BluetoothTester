@@ -7,13 +7,17 @@ import android.bluetooth.BluetoothManager
 import androidx.annotation.RequiresPermission
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import java.util.Locale
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import java.util.concurrent.atomic.AtomicLong
 import java.util.UUID
 import top.expli.bluetoothtester.bluetooth.SppClientManager
@@ -36,7 +40,9 @@ class SppViewModel(app: Application) : AndroidViewModel(app) {
     private var currentServer: SppServerManager? = null
     private var receiveJob: Job? = null
     private var connectionJob: Job? = null
+    private var speedTestJob: Job? = null
     private val chatId = AtomicLong(0L)
+    private val speedSampleId = AtomicLong(0L)
     private var lastConnState: SppConnectionState? = null
 
     init {
@@ -149,12 +155,111 @@ class SppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun disconnect() {
+        stopSpeedTest()
         currentClient?.disconnect()
         currentServer?.disconnect()
         stopReceiveLoop()
         connectionJob?.cancel(); connectionJob = null
         currentClient = null; currentServer = null
         _uiState.update { it.copy(connectionState = SppConnectionState.Closed) }
+    }
+
+    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
+    fun toggleSpeedTest() {
+        if (_uiState.value.speedTestRunning) stopSpeedTest() else startSpeedTest()
+    }
+
+    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
+    fun startSpeedTest(testDurationMs: Long = Long.MAX_VALUE) {
+        if (_uiState.value.speedTestRunning) return
+        val mgr = currentClient ?: currentServer
+        if (mgr == null || _uiState.value.connectionState != SppConnectionState.Connected) {
+            _uiState.update { it.copy(lastError = "未连接，无法测速") }
+            return
+        }
+
+        stopReceiveLoop()
+        _uiState.update {
+            it.copy(
+                lastError = null,
+                speedTestRunning = true,
+                speedTestElapsedMs = 0,
+                speedTestTxTotalBytes = 0,
+                speedTestRxTotalBytes = 0,
+                speedTestTxInstantBps = null,
+                speedTestRxInstantBps = null,
+                speedTestTxAvgBps = null,
+                speedTestRxAvgBps = null,
+                speedTestSamples = emptyList()
+            )
+        }
+        appendChat(SppChatDirection.System, "测速开始")
+
+        speedTestJob?.cancel()
+        speedTestJob = viewModelScope.launch {
+            try {
+                val payloadSize = _uiState.value.payloadSize.coerceIn(1, 32 * 1024)
+                val result = mgr.speedTestWithInstantSpeed(
+                    testDurationMs = testDurationMs,
+                    payloadSize = payloadSize,
+                    progress = { txInstant, rxInstant, txAvg, rxAvg, txTotalBytes, rxTotalBytes, elapsedMs ->
+                        _uiState.update { s ->
+                            val sample = SppSpeedSample(
+                                id = speedSampleId.incrementAndGet(),
+                                elapsedMs = elapsedMs,
+                                txInstantBps = txInstant,
+                                rxInstantBps = rxInstant,
+                                txAvgBps = txAvg,
+                                rxAvgBps = rxAvg,
+                                txTotalBytes = txTotalBytes,
+                                rxTotalBytes = rxTotalBytes
+                            )
+                            val cappedSamples = (listOf(sample) + s.speedTestSamples).take(400)
+                            s.copy(
+                                speedTestElapsedMs = elapsedMs,
+                                speedTestTxTotalBytes = txTotalBytes,
+                                speedTestRxTotalBytes = rxTotalBytes,
+                                speedTestTxInstantBps = txInstant,
+                                speedTestRxInstantBps = rxInstant,
+                                speedTestTxAvgBps = txAvg,
+                                speedTestRxAvgBps = rxAvg,
+                                speedTestSamples = cappedSamples
+                            )
+                        }
+                    }
+                )
+
+                if (result != null) {
+                    appendChat(
+                        SppChatDirection.System,
+                        "测速完成：TX ${formatBps(result.txAvgBps)} / RX ${formatBps(result.rxAvgBps)}"
+                    )
+                } else {
+                    _uiState.update { it.copy(lastError = "测速失败") }
+                    appendChat(SppChatDirection.System, "测速失败")
+                }
+            } catch (_: CancellationException) {
+                appendChat(SppChatDirection.System, "测速已停止")
+            } catch (t: Throwable) {
+                _uiState.update { it.copy(lastError = t.message ?: "测速异常") }
+                appendChat(
+                    SppChatDirection.System,
+                    "测速异常：${t.message ?: t::class.java.simpleName}"
+                )
+            } finally {
+                _uiState.update { it.copy(speedTestRunning = false) }
+                speedTestJob = null
+                if (_uiState.value.connectionState == SppConnectionState.Connected && (currentClient != null || currentServer != null)) {
+                    startReceiveLoop()
+                }
+            }
+        }
+    }
+
+    fun stopSpeedTest() {
+        speedTestJob?.cancel()
+        speedTestJob = null
+        _uiState.update { it.copy(speedTestRunning = false) }
     }
 
     fun sendOnce() {
@@ -218,8 +323,11 @@ class SppViewModel(app: Application) : AndroidViewModel(app) {
             appendChat(SppChatDirection.System, msg)
         }
         when (mapped) {
-            SppConnectionState.Connected -> startReceiveLoop()
-            SppConnectionState.Closed, SppConnectionState.Error -> stopReceiveLoop()
+            SppConnectionState.Connected -> if (!_uiState.value.speedTestRunning) startReceiveLoop()
+            SppConnectionState.Closed, SppConnectionState.Error -> {
+                stopSpeedTest()
+                stopReceiveLoop()
+            }
             else -> {}
         }
     }
@@ -237,12 +345,14 @@ class SppViewModel(app: Application) : AndroidViewModel(app) {
         stopReceiveLoop()
         val mgr = currentClient ?: currentServer ?: return
         receiveJob = viewModelScope.launch(Dispatchers.IO) {
-            while (true) {
+            while (isActive) {
                 val buf = mgr.receive(_uiState.value.payloadSize)
                 if (buf == null) break
                 if (buf.isNotEmpty()) {
                     val hex = buf.joinToString(" ") { b -> "%02X".format(b) }
                     appendChat(SppChatDirection.In, hex)
+                } else {
+                    delay(10)
                 }
             }
         }
@@ -251,6 +361,17 @@ class SppViewModel(app: Application) : AndroidViewModel(app) {
     private fun stopReceiveLoop() {
         receiveJob?.cancel()
         receiveJob = null
+    }
+
+    private fun formatBps(bps: Double): String {
+        val units = arrayOf("B/s", "KB/s", "MB/s", "GB/s")
+        var value = bps
+        var unitIndex = 0
+        while (value >= 1024 && unitIndex < units.lastIndex) {
+            value /= 1024
+            unitIndex++
+        }
+        return String.format(Locale.US, "%.2f %s", value, units[unitIndex])
     }
 
     override fun onCleared() {

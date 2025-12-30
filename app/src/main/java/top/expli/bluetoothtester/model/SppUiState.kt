@@ -13,6 +13,18 @@ data class SppChatItem(
 )
 
 @Serializable
+data class SppSpeedSample(
+    val id: Long,
+    val elapsedMs: Long,
+    val txInstantBps: Double,
+    val rxInstantBps: Double,
+    val txAvgBps: Double,
+    val rxAvgBps: Double,
+    val txTotalBytes: Long,
+    val rxTotalBytes: Long
+)
+
+@Serializable
 sealed interface SppConnectionState {
     @Serializable
     data object Idle : SppConnectionState
@@ -36,5 +48,14 @@ data class SppUiState(
     val lastError: String? = null,
     val chat: List<SppChatItem> = emptyList(),
     val sendingText: String = "",
-    val payloadSize: Int = 256
+    val payloadSize: Int = 256,
+    val speedTestRunning: Boolean = false,
+    val speedTestElapsedMs: Long = 0L,
+    val speedTestTxTotalBytes: Long = 0L,
+    val speedTestRxTotalBytes: Long = 0L,
+    val speedTestTxInstantBps: Double? = null,
+    val speedTestRxInstantBps: Double? = null,
+    val speedTestTxAvgBps: Double? = null,
+    val speedTestRxAvgBps: Double? = null,
+    val speedTestSamples: List<SppSpeedSample> = emptyList()
 )

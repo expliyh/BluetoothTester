@@ -12,6 +12,14 @@ import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
 
+data class SpeedTestResult(
+    val txAvgBps: Double,
+    val rxAvgBps: Double,
+    val txTotalBytes: Long,
+    val rxTotalBytes: Long,
+    val durationMs: Long
+)
+
 abstract class SendRecvBluetoothProfileManager(context: Context) :
     BasicBluetoothProfileManager(context) {
     protected var socket: BluetoothSocket? = null
@@ -42,19 +50,30 @@ abstract class SendRecvBluetoothProfileManager(context: Context) :
     }
 
     /**
-     * Measures average throughput (bytes per second) by repeatedly sending and receiving payloads.
-     * Returns null if any send/receive fails or inputs are invalid. Reports per-iteration and running
+     * Measures throughput by repeatedly sending and receiving payloads.
+     * Returns null if any send/receive fails or inputs are invalid. Reports instant and running
      * average throughput via [progress] callback when provided. Data transfer runs on IO, while
      * calculations run on Default to keep them parallel.
      */
     open suspend fun speedTestWithInstantSpeed(
         testDurationMs: Long = 5000,
         payloadSize: Int = 4096,
-        // 回调增加 instantSpeedBps: 瞬时速度, avgSpeedBps: 平均速度
-        progress: ((instantSpeedBps: Double, avgSpeedBps: Double) -> Unit)? = null
-    ): Double? = coroutineScope {
+        // tx: 发送方向, rx: 接收方向
+        progress: ((
+            txInstantBps: Double,
+            rxInstantBps: Double,
+            txAvgBps: Double,
+            rxAvgBps: Double,
+            txTotalBytes: Long,
+            rxTotalBytes: Long,
+            elapsedMs: Long
+        ) -> Unit)? = null
+    ): SpeedTestResult? = coroutineScope {
+        if (payloadSize <= 0 || testDurationMs <= 0) return@coroutineScope null
         val payload = ByteArray(payloadSize) { it.toByte() }
+        val bytesSent = AtomicLong(0L)
         val bytesReceived = AtomicLong(0L)
+        var failed = false
         var isRunning = true
         val testStart = System.nanoTime()
 
@@ -62,25 +81,57 @@ abstract class SendRecvBluetoothProfileManager(context: Context) :
         val sender = launch(Dispatchers.IO) {
             while (isRunning && isActive) {
                 if (!send(payload)) {
+                    failed = true
                     isRunning = false
                     break
                 }
+                bytesSent.addAndGet(payload.size.toLong())
             }
         }
 
         // 2. 接收协程 (只管抽水)
         val receiver = launch(Dispatchers.IO) {
             while (isRunning && isActive) {
-                val received = receive(payloadSize)
-                if (received != null) {
-                    bytesReceived.addAndGet(received.size.toLong())
+                val inp = input ?: run {
+                    failed = true
+                    isRunning = false
+                    break
+                }
+                val available = try {
+                    inp.available()
+                } catch (_: IOException) {
+                    failed = true
+                    isRunning = false
+                    break
+                }
+                if (available <= 0) {
+                    delay(5)
+                    continue
+                }
+                val toRead = minOf(payloadSize, available)
+                val buf = ByteArray(toRead)
+                val read = try {
+                    inp.read(buf, 0, toRead)
+                } catch (_: IOException) {
+                    failed = true
+                    isRunning = false
+                    break
+                }
+                if (read == -1) {
+                    failed = true
+                    isRunning = false
+                    break
+                }
+                if (read > 0) {
+                    bytesReceived.addAndGet(read.toLong())
                 }
             }
         }
 
         // 3. 监控与速度计算协程
         val monitor = launch(Dispatchers.Default) {
-            var lastBytes = 0L
+            var lastTxBytes = 0L
+            var lastRxBytes = 0L
             var lastTime = System.nanoTime()
             val intervalMs = 500L // 采样间隔：500ms
 
@@ -88,7 +139,8 @@ abstract class SendRecvBluetoothProfileManager(context: Context) :
                 delay(intervalMs)
 
                 val currentTime = System.nanoTime()
-                val currentBytes = bytesReceived.get()
+                val currentTxBytes = bytesSent.get()
+                val currentRxBytes = bytesReceived.get()
 
                 // 计算时间差 (秒)
                 val deltaTime = (currentTime - lastTime) / 1_000_000_000.0
@@ -96,17 +148,28 @@ abstract class SendRecvBluetoothProfileManager(context: Context) :
 
                 if (deltaTime > 0) {
                     // --- 瞬时速度计算 ---
-                    val deltaBytes = currentBytes - lastBytes
-                    val instantSpeed = deltaBytes / deltaTime
+                    val deltaTxBytes = currentTxBytes - lastTxBytes
+                    val deltaRxBytes = currentRxBytes - lastRxBytes
+                    val txInstantSpeed = deltaTxBytes / deltaTime
+                    val rxInstantSpeed = deltaRxBytes / deltaTime
 
                     // --- 总平均速度计算 ---
-                    val avgSpeed = currentBytes / totalTime
+                    val txAvgSpeed = currentTxBytes / totalTime
+                    val rxAvgSpeed = currentRxBytes / totalTime
 
-                    // 每次采样都动态返回当前迭代的速度与平均速度
-                    progress?.invoke(instantSpeed, avgSpeed)
+                    progress?.invoke(
+                        txInstantSpeed,
+                        rxInstantSpeed,
+                        txAvgSpeed,
+                        rxAvgSpeed,
+                        currentTxBytes,
+                        currentRxBytes,
+                        (totalTime * 1000).toLong()
+                    )
 
                     // 更新上一轮快照
-                    lastBytes = currentBytes
+                    lastTxBytes = currentTxBytes
+                    lastRxBytes = currentRxBytes
                     lastTime = currentTime
                 }
 
@@ -122,9 +185,19 @@ abstract class SendRecvBluetoothProfileManager(context: Context) :
         sender.cancel()
         receiver.cancel()
 
-        // 返回最终平均速度
-        val finalTotalTime = (System.nanoTime() - testStart) / 1_000_000_000.0
-        if (finalTotalTime <= 0) return@coroutineScope null
-        bytesReceived.get().toDouble() / finalTotalTime
+        if (failed) return@coroutineScope null
+
+        val durationNs = System.nanoTime() - testStart
+        val durationSec = durationNs / 1_000_000_000.0
+        if (durationSec <= 0) return@coroutineScope null
+        val txBytes = bytesSent.get()
+        val rxBytes = bytesReceived.get()
+        SpeedTestResult(
+            txAvgBps = txBytes.toDouble() / durationSec,
+            rxAvgBps = rxBytes.toDouble() / durationSec,
+            txTotalBytes = txBytes,
+            rxTotalBytes = rxBytes,
+            durationMs = durationNs / 1_000_000
+        )
     }
 }
