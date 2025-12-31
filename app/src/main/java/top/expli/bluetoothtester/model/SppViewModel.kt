@@ -51,13 +51,29 @@ class SppViewModel(app: Application) : AndroidViewModel(app) {
     private val chatId = AtomicLong(0L)
     private val speedSampleId = AtomicLong(0L)
 
+    private fun defaultSpeedTestMode(role: SppRole): SppSpeedTestMode =
+        when (role) {
+            SppRole.Client -> SppSpeedTestMode.TxOnly
+            SppRole.Server -> SppSpeedTestMode.RxOnly
+        }
+
     init {
         viewModelScope.launch {
             SppDeviceStore.observe(ctx).collect { list ->
                 _uiState.update { state ->
                     val sessions = state.sessions.mapValues { (key, session) ->
                         val updatedDevice = list.firstOrNull { it.key() == key } ?: session.device
-                        if (updatedDevice == session.device) session else session.copy(device = updatedDevice)
+                        if (updatedDevice == session.device) {
+                            session
+                        } else {
+                            val updatedMode =
+                                if (session.speedTestMode == defaultSpeedTestMode(session.device.role)) {
+                                    defaultSpeedTestMode(updatedDevice.role)
+                                } else {
+                                    session.speedTestMode
+                                }
+                            session.copy(device = updatedDevice, speedTestMode = updatedMode)
+                        }
                     }
                     state.copy(registered = list, sessions = sessions)
                 }
@@ -90,7 +106,10 @@ class SppViewModel(app: Application) : AndroidViewModel(app) {
         _uiState.update { state ->
             val existing = state.sessions[key]
             val session =
-                existing?.copy(device = device, lastError = null) ?: SppSession(device = device)
+                existing?.copy(device = device, lastError = null) ?: SppSession(
+                    device = device,
+                    speedTestMode = defaultSpeedTestMode(device.role)
+                )
             state.copy(
                 selectedKey = key,
                 sessions = state.sessions + (key to session)
@@ -110,8 +129,25 @@ class SppViewModel(app: Application) : AndroidViewModel(app) {
         val key = device.key()
         _uiState.update { state ->
             val existing = state.sessions[key] ?: return@update state
-            state.copy(sessions = state.sessions + (key to existing.copy(device = device)))
+            val updatedMode =
+                if (existing.speedTestMode == defaultSpeedTestMode(existing.device.role)) {
+                    defaultSpeedTestMode(device.role)
+                } else {
+                    existing.speedTestMode
+                }
+            state.copy(
+                sessions =
+                    state.sessions + (key to existing.copy(
+                        device = device,
+                        speedTestMode = updatedMode
+                    ))
+            )
         }
+    }
+
+    fun setSpeedTestWindowOpen(open: Boolean) {
+        val key = _uiState.value.selectedKey ?: return
+        updateSession(key) { it.copy(speedTestWindowOpen = open) }
     }
 
     fun remove(address: String) {
@@ -271,9 +307,16 @@ class SppViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 val payloadSize = (_uiState.value.sessions[key]?.payloadSize ?: 256)
                     .coerceIn(1, 32 * 1024)
+                val mode =
+                    _uiState.value.sessions[key]?.speedTestMode
+                        ?: defaultSpeedTestMode(session.device.role)
+                val txEnabled = mode == SppSpeedTestMode.TxOnly || mode == SppSpeedTestMode.Duplex
+                val rxEnabled = mode == SppSpeedTestMode.RxOnly || mode == SppSpeedTestMode.Duplex
                 val result = mgr.speedTestWithInstantSpeed(
                     testDurationMs = testDurationMs,
                     payloadSize = payloadSize,
+                    txEnabled = txEnabled,
+                    rxEnabled = rxEnabled,
                     progress = { txInstant, rxInstant, txAvg, rxAvg, txTotalBytes, rxTotalBytes, elapsedMs ->
                         updateSession(key) { s ->
                             val sample =
@@ -432,6 +475,9 @@ class SppViewModel(app: Application) : AndroidViewModel(app) {
     private fun appendChat(key: String, direction: SppChatDirection, text: String) {
         val line = text.trim()
         if (line.isBlank()) return
+        val session = _uiState.value.sessions[key] ?: return
+        val muteConsole = session.speedTestWindowOpen || session.speedTestRunning
+        if (muteConsole) return
         val item = SppChatItem(id = chatId.incrementAndGet(), direction = direction, text = line)
         updateSession(key) { state ->
             state.copy(chat = (listOf(item) + state.chat).take(500))
@@ -448,8 +494,11 @@ class SppViewModel(app: Application) : AndroidViewModel(app) {
                 val buf = mgr.receive(session.payloadSize)
                 if (buf == null) break
                 if (buf.isNotEmpty()) {
-                    val text = formatIncoming(buf, session.parseIncomingAsText)
-                    appendChat(key, SppChatDirection.In, text)
+                    val muteConsole = session.speedTestWindowOpen || session.speedTestRunning
+                    if (!muteConsole) {
+                        val text = formatIncoming(buf, session.parseIncomingAsText)
+                        appendChat(key, SppChatDirection.In, text)
+                    }
                 } else {
                     delay(10)
                 }

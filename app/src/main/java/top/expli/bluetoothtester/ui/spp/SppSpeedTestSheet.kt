@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import top.expli.bluetoothtester.model.SppConnectionState
 import top.expli.bluetoothtester.model.SppSession
 import top.expli.bluetoothtester.model.SppSpeedSample
+import top.expli.bluetoothtester.model.SppSpeedTestMode
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -50,9 +51,19 @@ fun SppSpeedTestSheet(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text("SPP 测速", style = MaterialTheme.typography.titleMedium)
+                val modeLabel =
+                    when (session.speedTestMode) {
+                        SppSpeedTestMode.TxOnly -> "单向TX"
+                        SppSpeedTestMode.RxOnly -> "单向RX"
+                        SppSpeedTestMode.Duplex -> "双向"
+                    }
                 AssistChip(
                     onClick = {},
-                    label = { Text(if (session.speedTestRunning) "测速中" else "已停止") }
+                    label = {
+                        Text(
+                            "${if (session.speedTestRunning) "测速中" else "已停止"} · $modeLabel"
+                        )
+                    }
                 )
             }
 

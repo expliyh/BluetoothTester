@@ -40,6 +40,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -72,6 +73,7 @@ fun SppDetailScreen(
     onPayloadChange: (Int) -> Unit,
     onSend: () -> Unit,
     onToggleSpeedTest: () -> Unit,
+    onSpeedTestWindowOpenChange: (Boolean) -> Unit,
     onParseIncomingAsTextChange: (Boolean) -> Unit,
     onToggleConnection: () -> Unit,
     onClearChat: () -> Unit,
@@ -89,6 +91,22 @@ fun SppDetailScreen(
     var showActions by remember { mutableStateOf(false) }
     var showPayloadDialog by remember { mutableStateOf(false) }
     var showSpeedTestSheet by remember { mutableStateOf(false) }
+
+    fun openSpeedTestSheet() {
+        if (showSpeedTestSheet) return
+        showSpeedTestSheet = true
+        onSpeedTestWindowOpenChange(true)
+    }
+
+    fun closeSpeedTestSheet() {
+        if (!showSpeedTestSheet) return
+        showSpeedTestSheet = false
+        onSpeedTestWindowOpenChange(false)
+    }
+
+    DisposableEffect(Unit) {
+        onDispose { onSpeedTestWindowOpenChange(false) }
+    }
 
     Surface(
         modifier = modifier.fillMaxSize(),
@@ -150,7 +168,7 @@ fun SppDetailScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { showSpeedTestSheet = true }
+                                .clickable { openSpeedTestSheet() }
                                 .padding(horizontal = 12.dp, vertical = 6.dp)
                         )
                     }
@@ -181,7 +199,7 @@ fun SppDetailScreen(
                             enabled = speedTesting || session.connectionState == SppConnectionState.Connected,
                             onClick = if (speedTesting) onToggleSpeedTest else onSend,
                             onLongClick = {
-                                showSpeedTestSheet = true
+                                openSpeedTestSheet()
                                 if (!speedTesting) onToggleSpeedTest()
                             }
                         )
@@ -230,7 +248,7 @@ fun SppDetailScreen(
                 trailingContent = {
                     TextButton(onClick = {
                         showActions = false
-                        showSpeedTestSheet = true
+                        openSpeedTestSheet()
                     }) { Text("打开") }
                 }
             )
@@ -352,7 +370,7 @@ fun SppDetailScreen(
     if (showSpeedTestSheet) {
         SppSpeedTestSheet(
             session = session,
-            onDismissRequest = { showSpeedTestSheet = false },
+            onDismissRequest = { closeSpeedTestSheet() },
             onToggleSpeedTest = onToggleSpeedTest
         )
     }

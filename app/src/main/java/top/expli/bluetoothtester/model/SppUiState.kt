@@ -6,6 +6,9 @@ import kotlinx.serialization.Serializable
 enum class SppChatDirection { In, Out, System }
 
 @Serializable
+enum class SppSpeedTestMode { TxOnly, RxOnly, Duplex }
+
+@Serializable
 data class SppChatItem(
     val id: Long,
     val direction: SppChatDirection,
@@ -47,8 +50,10 @@ data class SppSession(
     val lastError: String? = null,
     val chat: List<SppChatItem> = emptyList(),
     val sendingText: String = "",
-    val payloadSize: Int = 256,
+    val payloadSize: Int = 4096,
     val parseIncomingAsText: Boolean = true,
+    val speedTestMode: SppSpeedTestMode = SppSpeedTestMode.TxOnly,
+    val speedTestWindowOpen: Boolean = false,
     val speedTestRunning: Boolean = false,
     val speedTestElapsedMs: Long = 0L,
     val speedTestTxTotalBytes: Long = 0L,
