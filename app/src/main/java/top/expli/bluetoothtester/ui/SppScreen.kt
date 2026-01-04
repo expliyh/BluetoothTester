@@ -1,23 +1,46 @@
 package top.expli.bluetoothtester.ui
 
 import android.annotation.SuppressLint
-import androidx.activity.compose.BackHandler
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import android.app.Activity
 import android.bluetooth.BluetoothManager
 import android.content.Context
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Link
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
@@ -25,22 +48,21 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import kotlinx.coroutines.launch
+import top.expli.bluetoothtester.model.SppConnectionState
 import top.expli.bluetoothtester.model.SppViewModel
 import top.expli.bluetoothtester.ui.navigation.AppNavTransitions
 import top.expli.bluetoothtester.ui.permissions.BluetoothPermissions
 import top.expli.bluetoothtester.ui.permissions.openAppSettings
-import top.expli.bluetoothtester.ui.spp.SppListScreen
-import top.expli.bluetoothtester.ui.spp.SppDetailScreen
-import top.expli.bluetoothtester.ui.spp.SppRoute
 import top.expli.bluetoothtester.ui.spp.AddSppDeviceDialog
 import top.expli.bluetoothtester.ui.spp.BondedDeviceItem
 import top.expli.bluetoothtester.ui.spp.BondedDevicePickerSheet
-import top.expli.bluetoothtester.ui.spp.uniqueKey
+import top.expli.bluetoothtester.ui.spp.SppDetailScreen
+import top.expli.bluetoothtester.ui.spp.SppListScreen
+import top.expli.bluetoothtester.ui.spp.SppRoute
 import top.expli.bluetoothtester.ui.spp.label
-import top.expli.bluetoothtester.model.SppConnectionState
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.style.TextOverflow
+import top.expli.bluetoothtester.ui.spp.uniqueKey
 
+@SuppressLint("MissingPermission")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SppScreen(onBackClick: () -> Unit) {
@@ -144,6 +166,9 @@ fun SppScreen(onBackClick: () -> Unit) {
         }
     }
 
+    // 用于存储滚动到最新消息的函数
+    var scrollToLatest: (() -> Unit)? by remember { mutableStateOf(null) }
+
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
@@ -153,7 +178,17 @@ fun SppScreen(onBackClick: () -> Unit) {
                     if (!inDetail || selected == null) {
                         Text("SPP 工具")
                     } else {
-                        Column {
+                        Column(
+                            modifier = Modifier.combinedClickable(
+                                onClick = {},
+                                onDoubleClick = {
+                                    // 双击标题栏滚动到最新消息
+                                    scrollToLatest?.invoke()
+                                },
+                                indication = null,
+                                interactionSource = remember { MutableInteractionSource() }
+                            )
+                        ) {
                             Text(
                                 text = selected.name,
                                 maxLines = 1,
@@ -179,7 +214,7 @@ fun SppScreen(onBackClick: () -> Unit) {
                 navigationIcon = {
                     IconButton(onClick = { if (inDetail) navController.navigateUp() else onBackClick() }) {
                         Icon(
-                            if (inDetail) Icons.Default.ArrowBack else Icons.Default.Link,
+                            if (inDetail) Icons.AutoMirrored.Filled.ArrowBack else Icons.Default.Link,
                             contentDescription = "Back"
                         )
                     }
@@ -241,6 +276,7 @@ fun SppScreen(onBackClick: () -> Unit) {
                     onSpeedTestWindowOpenChange = { vm.setSpeedTestWindowOpen(it) },
                     onSpeedTestPayloadChange = { vm.updateSpeedTestPayload(it) },
                     onParseIncomingAsTextChange = { vm.updateParseIncomingAsText(it) },
+                    onScrollToLatest = { scrollFn -> scrollToLatest = scrollFn },
                     onToggleConnection = {
                         val active =
                             latestState.selectedKey?.let { latestState.sessions[it] }?.connectionState == SppConnectionState.Connected ||

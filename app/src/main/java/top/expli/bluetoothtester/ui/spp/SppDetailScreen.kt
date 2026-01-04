@@ -1,33 +1,36 @@
 package top.expli.bluetoothtester.ui.spp
 
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.BluetoothSearching
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.BluetoothSearching
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Divider
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
@@ -44,20 +47,18 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.layout.ime
-import androidx.compose.foundation.layout.navigationBars
+import kotlinx.coroutines.launch
 import top.expli.bluetoothtester.model.SppChatDirection
 import top.expli.bluetoothtester.model.SppChatItem
 import top.expli.bluetoothtester.model.SppConnectionState
@@ -78,7 +79,8 @@ fun SppDetailScreen(
     onParseIncomingAsTextChange: (Boolean) -> Unit,
     onToggleConnection: () -> Unit,
     onClearChat: () -> Unit,
-    onConnectFromBondedDevice: () -> Unit = {}
+    onConnectFromBondedDevice: () -> Unit = {},
+    onScrollToLatest: (() -> Unit) -> Unit = {}  // 向外暴露滚动函数
 ) {
     val session = sessionState
     if (session == null) {
@@ -109,6 +111,22 @@ fun SppDetailScreen(
         onDispose { onSpeedTestWindowOpenChange(false) }
     }
 
+    // LazyListState 用于控制滚动
+    val listState = rememberLazyListState()
+    val coroutineScope = rememberCoroutineScope()
+
+    // 注册滚动到最新的函数
+    DisposableEffect(Unit) {
+        onScrollToLatest {
+            coroutineScope.launch {
+                if (session.chat.isNotEmpty()) {
+                    listState.animateScrollToItem(0)
+                }
+            }
+        }
+        onDispose { }
+    }
+
     Surface(
         modifier = modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.surface
@@ -126,6 +144,7 @@ fun SppDetailScreen(
                 }
             } else {
                 LazyColumn(
+                    state = listState,
                     modifier = Modifier.fillMaxSize(),
                     reverseLayout = true,
                     contentPadding = PaddingValues(
@@ -173,7 +192,7 @@ fun SppDetailScreen(
                                 .padding(horizontal = 12.dp, vertical = 6.dp)
                         )
                     }
-                    Divider()
+                    HorizontalDivider()
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -195,7 +214,7 @@ fun SppDetailScreen(
 
                         val speedTesting = session.speedTestRunning
                         LongPressIconButton(
-                            icon = if (speedTesting) Icons.Default.Stop else Icons.Default.Send,
+                            icon = if (speedTesting) Icons.Default.Stop else Icons.AutoMirrored.Filled.Send,
                             contentDescription = if (speedTesting) "停止测速" else "发送",
                             enabled = speedTesting || session.connectionState == SppConnectionState.Connected,
                             onClick = if (speedTesting) onToggleSpeedTest else onSend,
@@ -222,7 +241,7 @@ fun SppDetailScreen(
                 SppRole.Server -> if (active) "停止监听" else "开始监听"
             }
             val connectIcon = when {
-                connecting -> Icons.Default.BluetoothSearching
+                connecting -> Icons.AutoMirrored.Filled.BluetoothSearching
                 active -> Icons.Default.Stop
                 else -> Icons.Default.PlayArrow
             }
@@ -239,7 +258,7 @@ fun SppDetailScreen(
                     }, enabled = !connecting) { Text(if (active) "停止" else "开始") }
                 }
             )
-            Divider()
+            HorizontalDivider()
 
             ListItem(
                 headlineContent = { Text("测速窗口") },
@@ -253,7 +272,7 @@ fun SppDetailScreen(
                     }) { Text("打开") }
                 }
             )
-            Divider()
+            HorizontalDivider()
 
             ListItem(
                 headlineContent = { Text("解析接收数据") },
@@ -269,7 +288,7 @@ fun SppDetailScreen(
                     )
                 }
             )
-            Divider()
+            HorizontalDivider()
 
             if (selected.role == SppRole.Client) {
                 ListItem(
@@ -277,7 +296,7 @@ fun SppDetailScreen(
                     supportingContent = { Text("从系统已配对设备选择") },
                     leadingContent = {
                         Icon(
-                            Icons.Default.BluetoothSearching,
+                            Icons.AutoMirrored.Filled.BluetoothSearching,
                             contentDescription = null
                         )
                     },
@@ -292,7 +311,7 @@ fun SppDetailScreen(
                         ) { Text("选择") }
                     }
                 )
-                Divider()
+                HorizontalDivider()
             }
 
             ListItem(
@@ -307,7 +326,7 @@ fun SppDetailScreen(
                     }) { Text("修改") }
                 }
             )
-            Divider()
+            HorizontalDivider()
 
             ListItem(
                 headlineContent = { Text("清空聊天记录") },
@@ -321,7 +340,7 @@ fun SppDetailScreen(
                     }) { Text("清空") }
                 }
             )
-            Divider()
+            HorizontalDivider()
 
             ListItem(
                 headlineContent = { Text("Socket 信息") },

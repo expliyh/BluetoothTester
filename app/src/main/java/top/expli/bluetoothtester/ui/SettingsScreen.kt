@@ -1,9 +1,5 @@
 package top.expli.bluetoothtester.ui
 
-import android.os.Build
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -40,7 +36,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -64,8 +59,6 @@ fun SettingsScreen(
     dynamicColorEnabled: Boolean,
     onDynamicColorChange: (Boolean) -> Unit
 ) {
-    val dynamicSupported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
-    val effectiveDynamic = dynamicColorEnabled && dynamicSupported
     val surfaceColor = MaterialTheme.colorScheme.surface
 
     Surface(color = surfaceColor) {
@@ -151,10 +144,8 @@ fun SettingsScreen(
                         icon = Icons.Default.Palette,
                         title = "动态取色",
                         description = "使用系统壁纸颜色 (Android 12+)",
-                        checked = effectiveDynamic,
-                        enabled = dynamicSupported,
-                        statusText = if (!dynamicSupported) "需要 Android 12+" else null,
-                        onCheckedChange = { onDynamicColorChange(it && dynamicSupported) }
+                        checked = dynamicColorEnabled,
+                        onCheckedChange = { onDynamicColorChange(it) }
                     )
                 }
 
