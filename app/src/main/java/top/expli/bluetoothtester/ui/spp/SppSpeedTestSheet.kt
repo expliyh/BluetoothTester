@@ -15,9 +15,14 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
@@ -33,6 +38,7 @@ fun SppSpeedTestSheet(
     session: SppSession,
     onDismissRequest: () -> Unit,
     onToggleSpeedTest: () -> Unit,
+    onSpeedTestPayloadChange: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     ModalBottomSheet(
@@ -88,6 +94,38 @@ fun SppSpeedTestSheet(
                     )
                 }
             )
+
+            // 自定义测速payload
+            var showPayloadDialog by remember { mutableStateOf(false) }
+            ListItem(
+                headlineContent = { Text("测速Payload") },
+                supportingContent = {
+                    Text(
+                        if (session.speedTestPayload.isEmpty()) "默认（0x00~0xFF序列）"
+                        else "自定义：${session.speedTestPayload}",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                },
+                trailingContent = {
+                    TextButton(
+                        onClick = { showPayloadDialog = true },
+                        enabled = !session.speedTestRunning
+                    ) {
+                        Text("设置")
+                    }
+                }
+            )
+
+            if (showPayloadDialog) {
+                PayloadDialog(
+                    currentPayload = session.speedTestPayload,
+                    onConfirm = { newPayload ->
+                        onSpeedTestPayloadChange(newPayload)
+                        showPayloadDialog = false
+                    },
+                    onDismiss = { showPayloadDialog = false }
+                )
+            }
 
             SpeedSummary(
                 title = "发送",
@@ -213,4 +251,45 @@ private fun formatElapsedMs(ms: Long): String {
     if (ms <= 0) return "0.0s"
     val seconds = ms / 1000.0
     return "%.1fs".format(seconds)
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PayloadDialog(
+    currentPayload: String,
+    onConfirm: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var text by remember { mutableStateOf(currentPayload) }
+
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("设置测速Payload") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    "留空使用默认序列(0x00~0xFF循环)，或输入自定义文本",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    label = { Text("Payload内容") },
+                    placeholder = { Text("留空=默认序列") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(text) }) {
+                Text("确定")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("取消")
+            }
+        }
+    )
 }

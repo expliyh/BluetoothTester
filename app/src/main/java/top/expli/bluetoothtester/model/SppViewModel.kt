@@ -150,6 +150,11 @@ class SppViewModel(app: Application) : AndroidViewModel(app) {
         updateSession(key) { it.copy(speedTestWindowOpen = open) }
     }
 
+    fun updateSpeedTestPayload(payload: String) {
+        val key = _uiState.value.selectedKey ?: return
+        updateSession(key) { it.copy(speedTestPayload = payload) }
+    }
+
     fun remove(address: String) {
         disconnect(address)
         viewModelScope.launch {
@@ -305,11 +310,14 @@ class SppViewModel(app: Application) : AndroidViewModel(app) {
         runtime.speedTestJob?.cancel()
         runtime.speedTestJob = viewModelScope.launch {
             try {
-                val payloadSize = (_uiState.value.sessions[key]?.payloadSize ?: 256)
+                val currentSession = _uiState.value.sessions[key]
+                val payloadSize = (currentSession?.payloadSize ?: 256)
                     .coerceIn(1, 32 * 1024)
-                val mode =
-                    _uiState.value.sessions[key]?.speedTestMode
-                        ?: defaultSpeedTestMode(session.device.role)
+                val mode = currentSession?.speedTestMode
+                    ?: defaultSpeedTestMode(session.device.role)
+                val customPayload = currentSession?.speedTestPayload?.takeIf { it.isNotEmpty() }
+                    ?.toByteArray(Charsets.UTF_8)
+                
                 val txEnabled = mode == SppSpeedTestMode.TxOnly || mode == SppSpeedTestMode.Duplex
                 val rxEnabled = mode == SppSpeedTestMode.RxOnly || mode == SppSpeedTestMode.Duplex
                 val result = mgr.speedTestWithInstantSpeed(
@@ -317,6 +325,7 @@ class SppViewModel(app: Application) : AndroidViewModel(app) {
                     payloadSize = payloadSize,
                     txEnabled = txEnabled,
                     rxEnabled = rxEnabled,
+                    customPayload = customPayload,
                     progress = { txInstant, rxInstant, txAvg, rxAvg, txTotalBytes, rxTotalBytes, elapsedMs ->
                         updateSession(key) { s ->
                             val sample =

@@ -62,6 +62,8 @@ abstract class SendRecvBluetoothProfileManager(context: Context) :
         payloadSize: Int = 4096,
         txEnabled: Boolean = true,
         rxEnabled: Boolean = true,
+        verifyData: Boolean = false,  // 是否验证接收数据的内容
+        customPayload: ByteArray? = null,  // 自定义payload，null=使用默认序列
         // tx: 发送方向, rx: 接收方向
         progress: ((
             txInstantBps: Double,
@@ -75,7 +77,15 @@ abstract class SendRecvBluetoothProfileManager(context: Context) :
     ): SpeedTestResult? = coroutineScope {
         if (payloadSize <= 0 || testDurationMs <= 0) return@coroutineScope null
         if (!txEnabled && !rxEnabled) return@coroutineScope null
-        val payload = ByteArray(payloadSize) { it.toByte() }
+        // 使用自定义payload或默认序列
+        val payload = customPayload?.let { custom ->
+            // 如果自定义payload小于payloadSize，循环填充
+            if (custom.size >= payloadSize) {
+                custom.copyOf(payloadSize)
+            } else {
+                ByteArray(payloadSize) { i -> custom[i % custom.size] }
+            }
+        } ?: ByteArray(payloadSize) { it.toByte() }
         val bytesSent = AtomicLong(0L)
         val bytesReceived = AtomicLong(0L)
         val txStartNs = AtomicLong(0L)
@@ -96,10 +106,20 @@ abstract class SendRecvBluetoothProfileManager(context: Context) :
                     }
                     val payloadBytes = payload.size.toLong()
                     var pending = 0L
+                    var unflushed = 0L  // 跟踪未flush的数据量
+                    val flushThreshold = 8 * 1024L  // 每8KB flush一次，平衡延迟和性能
+                    
                     while (isRunning.get() && isActive) {
                         try {
                             out.write(payload)
                             txStartNs.compareAndSet(0L, System.nanoTime())
+                            unflushed += payloadBytes
+
+                            // 批量flush：累积到阈值才flush，减少系统调用
+                            if (unflushed >= flushThreshold) {
+                                out.flush()
+                                unflushed = 0L
+                            }
                         } catch (_: IOException) {
                             failed.set(true)
                             isRunning.set(false)
@@ -109,6 +129,13 @@ abstract class SendRecvBluetoothProfileManager(context: Context) :
                         if (pending >= 64 * 1024) {
                             bytesSent.addAndGet(pending)
                             pending = 0L
+                        }
+                    }
+                    // 退出循环时确保所有数据都已发送
+                    if (unflushed > 0) {
+                        try {
+                            out.flush()
+                        } catch (_: IOException) {
                         }
                     }
                     if (pending > 0) bytesSent.addAndGet(pending)
@@ -131,20 +158,12 @@ abstract class SendRecvBluetoothProfileManager(context: Context) :
                     var pending = 0L
 
                     while (isRunning.get() && isActive) {
-                        val available = try {
-                            inp.available()
-                        } catch (_: IOException) {
-                            failed.set(true)
-                            isRunning.set(false)
-                            break
-                        }
-                        if (available <= 0) {
-                            yield()
-                            continue
-                        }
-                        val toRead = minOf(available, buf.size)
+                        // 直接尝试读取，让 InputStream 自己处理阻塞
+                        // 避免 available() 检查 + 忙等待的开销
                         val read = try {
-                            inp.read(buf, 0, toRead)
+                            // 使用阻塞读取，最多读取 bufSize 字节
+                            // 这样在没有数据时会阻塞等待，而不是消耗 CPU
+                            inp.read(buf, 0, buf.size)
                         } catch (_: IOException) {
                             failed.set(true)
                             isRunning.set(false)
@@ -156,6 +175,22 @@ abstract class SendRecvBluetoothProfileManager(context: Context) :
                             break
                         }
                         if (read > 0) {
+                            // 可选的数据验证：检查是否是预期的测速payload模式
+                            if (verifyData) {
+                                var valid = true
+                                for (i in 0 until read) {
+                                    // 验证数据是否符合 payload 的模式 (it.toByte())
+                                    if (buf[i] != ((bytesReceived.get() + pending + i) % 256).toByte()) {
+                                        valid = false
+                                        break
+                                    }
+                                }
+                                if (!valid) {
+                                    // 收到非测速数据，忽略或标记失败
+                                    continue  // 忽略这批数据，不计入统计
+                                }
+                            }
+                            
                             rxStartNs.compareAndSet(0L, System.nanoTime())
                             pending += read.toLong()
                             if (pending >= 64 * 1024) {

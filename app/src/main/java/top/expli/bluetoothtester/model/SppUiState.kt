@@ -53,6 +53,7 @@ data class SppSession(
     val payloadSize: Int = 4096,
     val parseIncomingAsText: Boolean = true,
     val speedTestMode: SppSpeedTestMode = SppSpeedTestMode.TxOnly,
+    val speedTestPayload: String = "",  // 自定义测速payload（空=使用默认序列）
     val speedTestWindowOpen: Boolean = false,
     val speedTestRunning: Boolean = false,
     val speedTestElapsedMs: Long = 0L,

@@ -74,6 +74,7 @@ fun SppDetailScreen(
     onSend: () -> Unit,
     onToggleSpeedTest: () -> Unit,
     onSpeedTestWindowOpenChange: (Boolean) -> Unit,
+    onSpeedTestPayloadChange: (String) -> Unit = {},
     onParseIncomingAsTextChange: (Boolean) -> Unit,
     onToggleConnection: () -> Unit,
     onClearChat: () -> Unit,
@@ -371,7 +372,8 @@ fun SppDetailScreen(
         SppSpeedTestSheet(
             session = session,
             onDismissRequest = { closeSpeedTestSheet() },
-            onToggleSpeedTest = onToggleSpeedTest
+            onToggleSpeedTest = onToggleSpeedTest,
+            onSpeedTestPayloadChange = onSpeedTestPayloadChange
         )
     }
 }
