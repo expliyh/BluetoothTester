@@ -61,6 +61,7 @@ import top.expli.bluetoothtester.ui.spp.SppListScreen
 import top.expli.bluetoothtester.ui.spp.SppRoute
 import top.expli.bluetoothtester.ui.spp.label
 import top.expli.bluetoothtester.ui.spp.uniqueKey
+import java.util.concurrent.atomic.AtomicReference
 
 @SuppressLint("MissingPermission")
 @OptIn(ExperimentalMaterial3Api::class)
@@ -78,10 +79,11 @@ fun SppScreen(onBackClick: () -> Unit) {
 
     var showPermissionRationaleDialog by remember { mutableStateOf(false) }
     var showPermissionSettingsDialog by remember { mutableStateOf(false) }
-    var pendingBluetoothAction by remember { mutableStateOf<(() -> Unit)?>(null) }
     var showBondedDevicePicker by remember { mutableStateOf(false) }
     var bondedDevices by remember { mutableStateOf<List<BondedDeviceItem>>(emptyList()) }
-    var bondedDevicePickerOnSelect by remember { mutableStateOf<((BondedDeviceItem) -> Unit)?>(null) }
+    val pendingBluetoothAction = remember { AtomicReference<(() -> Unit)?>(null) }
+    val bondedDevicePickerOnSelect =
+        remember { AtomicReference<((BondedDeviceItem) -> Unit)?>(null) }
 
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
@@ -91,8 +93,9 @@ fun SppScreen(onBackClick: () -> Unit) {
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { result ->
         val granted = result.values.all { it }
+        val pendingAction = pendingBluetoothAction.getAndSet(null)
         if (granted) {
-            pendingBluetoothAction?.invoke()
+            pendingAction?.invoke()
         } else {
             val act = activity
             if (act != null && !BluetoothPermissions.shouldShowRationale(act)) {
@@ -101,7 +104,6 @@ fun SppScreen(onBackClick: () -> Unit) {
                 scope.launch { snackbarHostState.showSnackbar("需要蓝牙权限才能继续") }
             }
         }
-        pendingBluetoothAction = null
     }
 
     fun ensureBluetoothPermissions(action: () -> Unit) {
@@ -109,7 +111,7 @@ fun SppScreen(onBackClick: () -> Unit) {
             action()
             return
         }
-        pendingBluetoothAction = action
+        pendingBluetoothAction.set(action)
         val act = activity
         if (act != null && BluetoothPermissions.shouldShowRationale(act)) {
             showPermissionRationaleDialog = true
@@ -136,7 +138,7 @@ fun SppScreen(onBackClick: () -> Unit) {
                         }
                     } else {
                         bondedDevices = result.devices
-                        bondedDevicePickerOnSelect = onPicked
+                        bondedDevicePickerOnSelect.set(onPicked)
                         showBondedDevicePicker = true
                     }
                 }
@@ -328,7 +330,7 @@ fun SppScreen(onBackClick: () -> Unit) {
         AlertDialog(
             onDismissRequest = {
                 showPermissionRationaleDialog = false
-                pendingBluetoothAction = null
+                pendingBluetoothAction.set(null)
             },
             title = { Text("需要蓝牙权限") },
             text = { Text("SPP 连接/监听需要授予“附近设备”相关的蓝牙连接与扫描权限。") },
@@ -341,7 +343,7 @@ fun SppScreen(onBackClick: () -> Unit) {
             dismissButton = {
                 TextButton(onClick = {
                     showPermissionRationaleDialog = false
-                    pendingBluetoothAction = null
+                    pendingBluetoothAction.set(null)
                 }) { Text("取消") }
             }
         )
@@ -373,13 +375,11 @@ fun SppScreen(onBackClick: () -> Unit) {
             devices = bondedDevices,
             onDismissRequest = {
                 showBondedDevicePicker = false
-                bondedDevicePickerOnSelect = null
+                bondedDevicePickerOnSelect.set(null)
             },
             onSelect = { picked ->
                 showBondedDevicePicker = false
-                val cb = bondedDevicePickerOnSelect
-                bondedDevicePickerOnSelect = null
-                cb?.invoke(picked)
+                bondedDevicePickerOnSelect.getAndSet(null)?.invoke(picked)
             }
         )
     }

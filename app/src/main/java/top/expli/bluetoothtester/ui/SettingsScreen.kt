@@ -117,7 +117,7 @@ fun SettingsScreen(
                         title = "自动重连",
                         description = "断开时自动尝试重新连接设备",
                         checked = autoReconnect,
-                        onCheckedChange = { autoReconnect = it }
+                        onCheckedChange = {}
                     )
                 }
 
