@@ -74,6 +74,8 @@ fun SppDetailScreen(
     onPayloadChange: (Int) -> Unit,
     onSend: () -> Unit,
     onToggleSpeedTest: () -> Unit,
+    onToggleSpeedTestMode: () -> Unit,
+    onMuteConsoleDuringTestChange: (Boolean) -> Unit,
     onSpeedTestWindowOpenChange: (Boolean) -> Unit,
     onSpeedTestPayloadChange: (String) -> Unit = {},
     onParseIncomingAsTextChange: (Boolean) -> Unit,
@@ -93,17 +95,13 @@ fun SppDetailScreen(
 
     var showActions by remember { mutableStateOf(false) }
     var showPayloadDialog by remember { mutableStateOf(false) }
-    var showSpeedTestSheet by remember { mutableStateOf(false) }
+    val showSpeedTestSheet = session.speedTestWindowOpen
 
     fun openSpeedTestSheet() {
-        if (showSpeedTestSheet) return
-        showSpeedTestSheet = true
         onSpeedTestWindowOpenChange(true)
     }
 
     fun closeSpeedTestSheet() {
-        if (!showSpeedTestSheet) return
-        showSpeedTestSheet = false
         onSpeedTestWindowOpenChange(false)
     }
 
@@ -392,6 +390,8 @@ fun SppDetailScreen(
             session = session,
             onDismissRequest = { closeSpeedTestSheet() },
             onToggleSpeedTest = onToggleSpeedTest,
+            onToggleSpeedTestMode = onToggleSpeedTestMode,
+            onMuteConsoleDuringTestChange = onMuteConsoleDuringTestChange,
             onSpeedTestPayloadChange = onSpeedTestPayloadChange
         )
     }

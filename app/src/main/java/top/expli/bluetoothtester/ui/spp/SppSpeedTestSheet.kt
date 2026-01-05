@@ -2,9 +2,9 @@ package top.expli.bluetoothtester.ui.spp
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -16,8 +16,11 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -29,7 +32,6 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import top.expli.bluetoothtester.model.SppConnectionState
 import top.expli.bluetoothtester.model.SppSession
-import top.expli.bluetoothtester.model.SppSpeedSample
 import top.expli.bluetoothtester.model.SppSpeedTestMode
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -38,122 +40,193 @@ fun SppSpeedTestSheet(
     session: SppSession,
     onDismissRequest: () -> Unit,
     onToggleSpeedTest: () -> Unit,
+    onToggleSpeedTestMode: () -> Unit,
+    onMuteConsoleDuringTestChange: (Boolean) -> Unit,
     onSpeedTestPayloadChange: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var showPayloadDialog by remember { mutableStateOf(false) }
+
     ModalBottomSheet(
         onDismissRequest = onDismissRequest,
+        sheetState = sheetState,
         modifier = modifier
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+        LazyColumn(
+            modifier = Modifier.fillMaxWidth(),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("SPP 测速", style = MaterialTheme.typography.titleMedium)
-                val modeLabel =
-                    when (session.speedTestMode) {
-                        SppSpeedTestMode.TxOnly -> "单向TX"
-                        SppSpeedTestMode.RxOnly -> "单向RX"
-                        SppSpeedTestMode.Duplex -> "双向"
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("SPP 测速", style = MaterialTheme.typography.titleMedium)
+                    val modeLabel =
+                        when (session.speedTestMode) {
+                            SppSpeedTestMode.TxOnly -> "单向TX"
+                            SppSpeedTestMode.RxOnly -> "单向RX"
+                            SppSpeedTestMode.Duplex -> "双向"
+                        }
+                    AssistChip(
+                        onClick = onToggleSpeedTestMode,
+                        enabled = !session.speedTestRunning,
+                        label = {
+                            Text(
+                                "${if (session.speedTestRunning) "测速中" else "已停止"} · $modeLabel"
+                            )
+                        }
+                    )
+                }
+            }
+
+            item {
+                val canOperate =
+                    session.connectionState == SppConnectionState.Connected || session.speedTestRunning
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = onToggleSpeedTest, enabled = canOperate) {
+                        Text(if (session.speedTestRunning) "停止" else "开始")
                     }
-                AssistChip(
-                    onClick = {},
-                    label = {
+                    TextButton(onClick = onDismissRequest) { Text("关闭") }
+                }
+            }
+
+            item { Divider() }
+
+            item {
+                val selected = session.device
+                ListItem(
+                    headlineContent = { Text(selected.name) },
+                    supportingContent = {
                         Text(
-                            "${if (session.speedTestRunning) "测速中" else "已停止"} · $modeLabel"
+                            if (selected.address.isBlank()) selected.uuid else selected.address,
+                            fontFamily = FontFamily.Monospace
                         )
                     }
                 )
             }
 
-            val canOperate =
-                session.connectionState == SppConnectionState.Connected || session.speedTestRunning
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = onToggleSpeedTest, enabled = canOperate) {
-                    Text(if (session.speedTestRunning) "停止" else "开始")
-                }
-                TextButton(onClick = onDismissRequest) { Text("关闭") }
-            }
-
-            Divider()
-
-            val selected = session.device
-            ListItem(
-                headlineContent = { Text(selected.name) },
-                supportingContent = {
-                    Text(
-                        if (selected.address.isBlank()) selected.uuid else selected.address,
-                        fontFamily = FontFamily.Monospace
-                    )
-                }
-            )
-
-            // 自定义测速payload
-            var showPayloadDialog by remember { mutableStateOf(false) }
-            ListItem(
-                headlineContent = { Text("测速Payload") },
-                supportingContent = {
-                    Text(
-                        if (session.speedTestPayload.isEmpty()) "默认（0x00~0xFF序列）"
-                        else "自定义：${session.speedTestPayload}",
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                },
-                trailingContent = {
-                    TextButton(
-                        onClick = { showPayloadDialog = true },
-                        enabled = !session.speedTestRunning
-                    ) {
-                        Text("设置")
-                    }
-                }
-            )
-
-            if (showPayloadDialog) {
-                PayloadDialog(
-                    currentPayload = session.speedTestPayload,
-                    onConfirm = { newPayload ->
-                        onSpeedTestPayloadChange(newPayload)
-                        showPayloadDialog = false
+            item {
+                ListItem(
+                    headlineContent = { Text("测速Payload") },
+                    supportingContent = {
+                        Text(
+                            if (session.speedTestPayload.isEmpty()) "默认（0x00~0xFF序列）"
+                            else "自定义：${session.speedTestPayload}",
+                            style = MaterialTheme.typography.bodySmall
+                        )
                     },
-                    onDismiss = { showPayloadDialog = false }
+                    trailingContent = {
+                        TextButton(
+                            onClick = { showPayloadDialog = true },
+                            enabled = !session.speedTestRunning
+                        ) {
+                            Text("设置")
+                        }
+                    }
                 )
             }
 
-            SpeedSummary(
-                title = "发送",
-                instantBps = session.speedTestTxInstantBps,
-                avgBps = session.speedTestTxAvgBps,
-                totalBytes = session.speedTestTxTotalBytes
-            )
-            SpeedSummary(
-                title = "接收",
-                instantBps = session.speedTestRxInstantBps,
-                avgBps = session.speedTestRxAvgBps,
-                totalBytes = session.speedTestRxTotalBytes
-            )
-            ListItem(
-                headlineContent = { Text("时长") },
-                supportingContent = {
+            item {
+                ListItem(
+                    headlineContent = { Text("测速时抑制控制台输出") },
+                    supportingContent = {
+                        Text(
+                            "测速窗口打开/测速进行中时不写入聊天记录",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    },
+                    trailingContent = {
+                        Switch(
+                            checked = session.muteConsoleDuringTest,
+                            onCheckedChange = onMuteConsoleDuringTestChange
+                        )
+                    }
+                )
+            }
+
+            item {
+                SpeedSummary(
+                    title = "发送",
+                    instantBps = session.speedTestTxInstantBps,
+                    avgBps = session.speedTestTxAvgBps,
+                    totalBytes = session.speedTestTxTotalBytes
+                )
+            }
+            item {
+                SpeedSummary(
+                    title = "接收",
+                    instantBps = session.speedTestRxInstantBps,
+                    avgBps = session.speedTestRxAvgBps,
+                    totalBytes = session.speedTestRxTotalBytes
+                )
+            }
+            item {
+                ListItem(
+                    headlineContent = { Text("时长") },
+                    supportingContent = {
+                        Text(
+                            formatElapsedMs(session.speedTestElapsedMs),
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+                )
+            }
+
+            item { SpeedDebug(session) }
+
+            item { Divider() }
+
+            item { Text("速度记录（最新在前）", style = MaterialTheme.typography.titleSmall) }
+
+            if (session.speedTestSamples.isEmpty()) {
+                item {
                     Text(
-                        formatElapsedMs(session.speedTestElapsedMs),
-                        fontFamily = FontFamily.Monospace
+                        "暂无记录（开始测速后将自动记录）",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall
                     )
                 }
-            )
-
-            Divider()
-
-            Text("速度记录（最新在前）", style = MaterialTheme.typography.titleSmall)
-            SpeedSampleList(session.speedTestSamples)
+            } else {
+                items(session.speedTestSamples, key = { it.id }) { s ->
+                    ListItem(
+                        headlineContent = {
+                            Text(
+                                "t=${formatElapsedMs(s.elapsedMs)} · TX ${formatBps(s.txInstantBps)} · RX ${
+                                    formatBps(
+                                        s.rxInstantBps
+                                    )
+                                }",
+                                fontFamily = FontFamily.Monospace
+                            )
+                        },
+                        supportingContent = {
+                            Text(
+                                "avg TX ${formatBps(s.txAvgBps)} · avg RX ${formatBps(s.rxAvgBps)}",
+                                fontFamily = FontFamily.Monospace,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    )
+                    Divider()
+                }
+            }
         }
+    }
+
+    if (showPayloadDialog) {
+        PayloadDialog(
+            currentPayload = session.speedTestPayload,
+            onConfirm = { newPayload ->
+                onSpeedTestPayloadChange(newPayload)
+                showPayloadDialog = false
+            },
+            onDismiss = { showPayloadDialog = false }
+        )
     }
 }
 
@@ -187,44 +260,6 @@ private fun SpeedSummary(
     )
 }
 
-@Composable
-private fun SpeedSampleList(samples: List<SppSpeedSample>) {
-    if (samples.isEmpty()) {
-        Text(
-            "暂无记录（开始测速后将自动记录）",
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            style = MaterialTheme.typography.bodySmall
-        )
-        return
-    }
-
-    LazyColumn(modifier = Modifier.heightIn(max = 420.dp)) {
-        items(samples, key = { it.id }) { s ->
-            ListItem(
-                headlineContent = {
-                    Text(
-                        "t=${formatElapsedMs(s.elapsedMs)} · TX ${formatBps(s.txInstantBps)} · RX ${
-                            formatBps(
-                                s.rxInstantBps
-                            )
-                        }",
-                        fontFamily = FontFamily.Monospace
-                    )
-                },
-                supportingContent = {
-                    Text(
-                        "avg TX ${formatBps(s.txAvgBps)} · avg RX ${formatBps(s.rxAvgBps)}",
-                        fontFamily = FontFamily.Monospace,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-            )
-            Divider()
-        }
-    }
-}
-
 private fun formatBps(bps: Double): String {
     val units = arrayOf("B/s", "KB/s", "MB/s", "GB/s")
     var value = bps
@@ -251,6 +286,74 @@ private fun formatElapsedMs(ms: Long): String {
     if (ms <= 0) return "0.0s"
     val seconds = ms / 1000.0
     return "%.1fs".format(seconds)
+}
+
+@Composable
+private fun SpeedDebug(session: SppSession) {
+    val txWriteAvgMs = session.speedTestTxWriteAvgMs
+    val txWriteMaxMs = session.speedTestTxWriteMaxMs
+    val rxReadAvgMs = session.speedTestRxReadAvgMs
+    val rxReadMaxMs = session.speedTestRxReadMaxMs
+    val rxReadAvgBytes = session.speedTestRxReadAvgBytes
+    val txDelay = session.speedTestTxFirstWriteDelayMs
+    val rxDelay = session.speedTestRxFirstByteDelayMs
+
+    if (
+        !session.speedTestRunning &&
+        txWriteAvgMs == null &&
+        txWriteMaxMs == null &&
+        rxReadAvgMs == null &&
+        rxReadMaxMs == null &&
+        rxReadAvgBytes == null &&
+        txDelay == null &&
+        rxDelay == null
+    ) return
+
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text("诊断", style = MaterialTheme.typography.titleSmall)
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = MaterialTheme.shapes.medium,
+            color = MaterialTheme.colorScheme.surfaceVariant
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                if (txWriteAvgMs == null && rxReadAvgMs == null && txDelay == null && rxDelay == null) {
+                    Text(
+                        "测速进行中…（诊断数据采集中）",
+                        fontFamily = FontFamily.Monospace,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+                Text(
+                    "TX write: avg ${txWriteAvgMs?.let { "%.2fms".format(it) } ?: "--"} · max ${
+                        txWriteMaxMs?.let { "%.2fms".format(it) } ?: "--"
+                    }",
+                    fontFamily = FontFamily.Monospace,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Text(
+                    "RX read: avg ${rxReadAvgMs?.let { "%.2fms".format(it) } ?: "--"} · max ${
+                        rxReadMaxMs?.let { "%.2fms".format(it) } ?: "--"
+                    } · avgBytes ${rxReadAvgBytes?.let { "%.0f".format(it) } ?: "--"}",
+                    fontFamily = FontFamily.Monospace,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Text(
+                    "startDelay: tx ${txDelay?.let { "${it}ms" } ?: "--"} · rx ${
+                        rxDelay?.let { "${it}ms" } ?: "--"
+                    }",
+                    fontFamily = FontFamily.Monospace,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

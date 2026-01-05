@@ -273,6 +273,8 @@ fun SppScreen(onBackClick: () -> Unit) {
                     onPayloadChange = { vm.updatePayloadSize(it) },
                     onSend = { vm.sendOnce() },
                     onToggleSpeedTest = { ensureBluetoothPermissions { vm.toggleSpeedTest() } },
+                    onToggleSpeedTestMode = { vm.toggleSpeedTestMode() },
+                    onMuteConsoleDuringTestChange = { vm.setMuteConsoleDuringTest(it) },
                     onSpeedTestWindowOpenChange = { vm.setSpeedTestWindowOpen(it) },
                     onSpeedTestPayloadChange = { vm.updateSpeedTestPayload(it) },
                     onParseIncomingAsTextChange = { vm.updateParseIncomingAsText(it) },

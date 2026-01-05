@@ -52,6 +52,7 @@ data class SppSession(
     val sendingText: String = "",
     val payloadSize: Int = 4096,
     val parseIncomingAsText: Boolean = true,
+    val muteConsoleDuringTest: Boolean = true,
     val speedTestMode: SppSpeedTestMode = SppSpeedTestMode.TxOnly,
     val speedTestPayload: String = "",  // 自定义测速payload（空=使用默认序列）
     val speedTestWindowOpen: Boolean = false,
@@ -63,6 +64,13 @@ data class SppSession(
     val speedTestRxInstantBps: Double? = null,
     val speedTestTxAvgBps: Double? = null,
     val speedTestRxAvgBps: Double? = null,
+    val speedTestTxWriteAvgMs: Double? = null,
+    val speedTestTxWriteMaxMs: Double? = null,
+    val speedTestRxReadAvgMs: Double? = null,
+    val speedTestRxReadMaxMs: Double? = null,
+    val speedTestRxReadAvgBytes: Double? = null,
+    val speedTestTxFirstWriteDelayMs: Long? = null,
+    val speedTestRxFirstByteDelayMs: Long? = null,
     val speedTestSamples: List<SppSpeedSample> = emptyList()
 )
 

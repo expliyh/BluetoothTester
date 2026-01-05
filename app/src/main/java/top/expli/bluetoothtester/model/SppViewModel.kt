@@ -7,25 +7,28 @@ import android.bluetooth.BluetoothManager
 import androidx.annotation.RequiresPermission
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import java.util.Locale
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import java.util.concurrent.atomic.AtomicLong
-import java.util.UUID
+import kotlinx.coroutines.withContext
 import top.expli.bluetoothtester.bluetooth.SendRecvBluetoothProfileManager
 import top.expli.bluetoothtester.bluetooth.SocketLikeBluetoothClientManager
 import top.expli.bluetoothtester.bluetooth.SocketLikeBluetoothServerManager
+import top.expli.bluetoothtester.bluetooth.SpeedTestDiagnostics
 import top.expli.bluetoothtester.bluetooth.SppClientManager
 import top.expli.bluetoothtester.bluetooth.SppServerManager
 import top.expli.bluetoothtester.data.SppDeviceStore
+import java.util.Locale
+import java.util.UUID
+import java.util.concurrent.atomic.AtomicLong
 
 class SppViewModel(app: Application) : AndroidViewModel(app) {
     private val ctx = app.applicationContext
@@ -41,7 +44,8 @@ class SppViewModel(app: Application) : AndroidViewModel(app) {
         var receiveJob: Job? = null,
         var connectionJob: Job? = null,
         var speedTestJob: Job? = null,
-        var lastConnState: SppConnectionState? = null
+        var lastConnState: SppConnectionState? = null,
+        val controlBuffer: StringBuilder = StringBuilder()
     ) {
         val manager: SendRecvBluetoothProfileManager?
             get() = client ?: server
@@ -50,6 +54,13 @@ class SppViewModel(app: Application) : AndroidViewModel(app) {
     private val runtimes = mutableMapOf<String, SessionRuntime>()
     private val chatId = AtomicLong(0L)
     private val speedSampleId = AtomicLong(0L)
+
+    private companion object {
+        private const val REMOTE_START_PREFIX = "START:"
+        private const val REMOTE_START_ACK = "START_ACK"
+        private const val REMOTE_EOF = "EOF"
+        private const val REMOTE_RX_MAX_DURATION_MS = 60_000L
+    }
 
     private fun defaultSpeedTestMode(role: SppRole): SppSpeedTestMode =
         when (role) {
@@ -94,6 +105,11 @@ class SppViewModel(app: Application) : AndroidViewModel(app) {
     fun updateParseIncomingAsText(enabled: Boolean) {
         val key = _uiState.value.selectedKey ?: return
         updateSession(key) { it.copy(parseIncomingAsText = enabled) }
+    }
+
+    fun setMuteConsoleDuringTest(enabled: Boolean) {
+        val key = _uiState.value.selectedKey ?: return
+        updateSession(key) { it.copy(muteConsoleDuringTest = enabled) }
     }
 
     fun clearChat() {
@@ -153,6 +169,20 @@ class SppViewModel(app: Application) : AndroidViewModel(app) {
     fun updateSpeedTestPayload(payload: String) {
         val key = _uiState.value.selectedKey ?: return
         updateSession(key) { it.copy(speedTestPayload = payload) }
+    }
+
+    fun toggleSpeedTestMode() {
+        val key = _uiState.value.selectedKey ?: return
+        val session = _uiState.value.sessions[key] ?: return
+        if (session.speedTestRunning) return
+
+        val next =
+            when (session.speedTestMode) {
+                SppSpeedTestMode.TxOnly -> SppSpeedTestMode.RxOnly
+                SppSpeedTestMode.RxOnly -> SppSpeedTestMode.TxOnly
+                SppSpeedTestMode.Duplex -> SppSpeedTestMode.TxOnly
+            }
+        updateSession(key) { it.copy(speedTestMode = next) }
     }
 
     fun remove(address: String) {
@@ -302,6 +332,13 @@ class SppViewModel(app: Application) : AndroidViewModel(app) {
                 speedTestRxInstantBps = null,
                 speedTestTxAvgBps = null,
                 speedTestRxAvgBps = null,
+                speedTestTxWriteAvgMs = null,
+                speedTestTxWriteMaxMs = null,
+                speedTestRxReadAvgMs = null,
+                speedTestRxReadMaxMs = null,
+                speedTestRxReadAvgBytes = null,
+                speedTestTxFirstWriteDelayMs = null,
+                speedTestRxFirstByteDelayMs = null,
                 speedTestSamples = emptyList()
             )
         }
@@ -326,6 +363,7 @@ class SppViewModel(app: Application) : AndroidViewModel(app) {
                     txEnabled = txEnabled,
                     rxEnabled = rxEnabled,
                     customPayload = customPayload,
+                    diagnostics = { diag -> applySpeedTestDiagnostics(key, diag) },
                     progress = { txInstant, rxInstant, txAvg, rxAvg, txTotalBytes, rxTotalBytes, elapsedMs ->
                         updateSession(key) { s ->
                             val sample =
@@ -355,6 +393,17 @@ class SppViewModel(app: Application) : AndroidViewModel(app) {
                 )
 
                 if (result != null) {
+                    updateSession(key) {
+                        it.copy(
+                            speedTestTxWriteAvgMs = result.txWriteAvgMs,
+                            speedTestTxWriteMaxMs = result.txWriteMaxMs,
+                            speedTestRxReadAvgMs = result.rxReadAvgMs,
+                            speedTestRxReadMaxMs = result.rxReadMaxMs,
+                            speedTestRxReadAvgBytes = result.rxReadAvgBytes,
+                            speedTestTxFirstWriteDelayMs = result.txFirstWriteDelayMs,
+                            speedTestRxFirstByteDelayMs = result.rxFirstByteDelayMs
+                        )
+                    }
                     appendChat(
                         key,
                         SppChatDirection.System,
@@ -394,6 +443,150 @@ class SppViewModel(app: Application) : AndroidViewModel(app) {
         runtime.speedTestJob?.cancel()
         runtime.speedTestJob = null
         updateSession(key) { it.copy(speedTestRunning = false) }
+    }
+
+    private fun applySpeedTestDiagnostics(key: String, diag: SpeedTestDiagnostics) {
+        updateSession(key) {
+            it.copy(
+                speedTestTxWriteAvgMs = diag.txWriteAvgMs,
+                speedTestTxWriteMaxMs = diag.txWriteMaxMs,
+                speedTestRxReadAvgMs = diag.rxReadAvgMs,
+                speedTestRxReadMaxMs = diag.rxReadMaxMs,
+                speedTestRxReadAvgBytes = diag.rxReadAvgBytes,
+                speedTestTxFirstWriteDelayMs = diag.txFirstWriteDelayMs,
+                speedTestRxFirstByteDelayMs = diag.rxFirstByteDelayMs
+            )
+        }
+    }
+
+    private fun startRemoteRxSpeedTest(key: String, targetBytes: Long) {
+        if (targetBytes <= 0) return
+        val session = _uiState.value.sessions[key] ?: return
+        val runtime = runtimes[key] ?: return
+        val mgr = runtime.manager ?: return
+        if (session.connectionState != SppConnectionState.Connected) return
+        if (session.speedTestRunning) return
+        runtime.controlBuffer.clear()
+
+        stopReceiveLoop(key)
+        updateSession(key) {
+            it.copy(
+                lastError = null,
+                speedTestMode = SppSpeedTestMode.RxOnly,
+                speedTestWindowOpen = true,
+                speedTestRunning = true,
+                speedTestElapsedMs = 0,
+                speedTestTxTotalBytes = 0,
+                speedTestRxTotalBytes = 0,
+                speedTestTxInstantBps = null,
+                speedTestRxInstantBps = null,
+                speedTestTxAvgBps = null,
+                speedTestRxAvgBps = null,
+                speedTestTxWriteAvgMs = null,
+                speedTestTxWriteMaxMs = null,
+                speedTestRxReadAvgMs = null,
+                speedTestRxReadMaxMs = null,
+                speedTestRxReadAvgBytes = null,
+                speedTestTxFirstWriteDelayMs = null,
+                speedTestRxFirstByteDelayMs = null,
+                speedTestSamples = emptyList()
+            )
+        }
+
+        runtime.speedTestJob?.cancel()
+        runtime.speedTestJob = viewModelScope.launch {
+            var ackSent = false
+            try {
+                val currentSession = _uiState.value.sessions[key]
+                val payloadSize = (currentSession?.payloadSize ?: 256)
+                    .coerceIn(1, 32 * 1024)
+
+                val result = mgr.speedTestRxUntilBytes(
+                    targetBytes = targetBytes,
+                    maxDurationMs = REMOTE_RX_MAX_DURATION_MS,
+                    payloadSize = payloadSize,
+                    diagnostics = { diag -> applySpeedTestDiagnostics(key, diag) },
+                    onReceiverReady = {
+                        val ackOk =
+                            withContext(Dispatchers.IO) {
+                                mgr.send(REMOTE_START_ACK.encodeToByteArray())
+                            }
+                        ackSent = ackOk
+                        if (!ackOk) {
+                            updateSession(key) { it.copy(lastError = "发送 START_ACK 失败") }
+                        }
+                        ackOk
+                    },
+                    progress = { txInstant, rxInstant, txAvg, rxAvg, txTotalBytes, rxTotalBytes, elapsedMs ->
+                        updateSession(key) { s ->
+                            val sample =
+                                SppSpeedSample(
+                                    id = speedSampleId.incrementAndGet(),
+                                    elapsedMs = elapsedMs,
+                                    txInstantBps = txInstant,
+                                    rxInstantBps = rxInstant,
+                                    txAvgBps = txAvg,
+                                    rxAvgBps = rxAvg,
+                                    txTotalBytes = txTotalBytes,
+                                    rxTotalBytes = rxTotalBytes
+                                )
+                            val cappedSamples = (listOf(sample) + s.speedTestSamples).take(400)
+                            s.copy(
+                                speedTestElapsedMs = elapsedMs,
+                                speedTestTxTotalBytes = txTotalBytes,
+                                speedTestRxTotalBytes = rxTotalBytes,
+                                speedTestTxInstantBps = txInstant,
+                                speedTestRxInstantBps = rxInstant,
+                                speedTestTxAvgBps = txAvg,
+                                speedTestRxAvgBps = rxAvg,
+                                speedTestSamples = cappedSamples
+                            )
+                        }
+                    }
+                )
+
+                if (result != null) {
+                    updateSession(key) {
+                        it.copy(
+                            speedTestElapsedMs = result.durationMs,
+                            speedTestTxTotalBytes = result.txTotalBytes,
+                            speedTestRxTotalBytes = result.rxTotalBytes,
+                            speedTestTxAvgBps = result.txAvgBps,
+                            speedTestRxAvgBps = result.rxAvgBps,
+                            speedTestTxWriteAvgMs = result.txWriteAvgMs,
+                            speedTestTxWriteMaxMs = result.txWriteMaxMs,
+                            speedTestRxReadAvgMs = result.rxReadAvgMs,
+                            speedTestRxReadMaxMs = result.rxReadMaxMs,
+                            speedTestRxReadAvgBytes = result.rxReadAvgBytes,
+                            speedTestTxFirstWriteDelayMs = result.txFirstWriteDelayMs,
+                            speedTestRxFirstByteDelayMs = result.rxFirstByteDelayMs
+                        )
+                    }
+                } else {
+                    val existingError = _uiState.value.sessions[key]?.lastError
+                    if (existingError == null) {
+                        updateSession(key) { it.copy(lastError = "测速失败") }
+                    }
+                }
+            } catch (_: CancellationException) {
+            } catch (t: Throwable) {
+                updateSession(key) { it.copy(lastError = t.message ?: "测速异常") }
+            } finally {
+                if (ackSent) {
+                    runCatching {
+                        withContext(NonCancellable + Dispatchers.IO) {
+                            mgr.send(REMOTE_EOF.encodeToByteArray())
+                        }
+                    }
+                }
+                updateSession(key) { it.copy(speedTestRunning = false) }
+                runtime.speedTestJob = null
+                val latest = _uiState.value.sessions[key]
+                if (latest?.connectionState == SppConnectionState.Connected && runtime.manager != null) {
+                    startReceiveLoop(key)
+                }
+            }
+        }
     }
 
     fun sendOnce() {
@@ -453,6 +646,9 @@ class SppViewModel(app: Application) : AndroidViewModel(app) {
         updateSession(key) { it.copy(connectionState = mapped) }
 
         val runtime = runtimes.getOrPut(key) { SessionRuntime() }
+        if (mapped == SppConnectionState.Closed || mapped == SppConnectionState.Error) {
+            runtime.controlBuffer.clear()
+        }
         if (runtime.lastConnState != mapped) {
             runtime.lastConnState = mapped
             val msg = when (mapped) {
@@ -485,12 +681,49 @@ class SppViewModel(app: Application) : AndroidViewModel(app) {
         val line = text.trim()
         if (line.isBlank()) return
         val session = _uiState.value.sessions[key] ?: return
-        val muteConsole = session.speedTestWindowOpen || session.speedTestRunning
+        val muteConsole =
+            session.muteConsoleDuringTest && (session.speedTestWindowOpen || session.speedTestRunning)
         if (muteConsole) return
         val item = SppChatItem(id = chatId.incrementAndGet(), direction = direction, text = line)
         updateSession(key) { state ->
             state.copy(chat = (listOf(item) + state.chat).take(500))
         }
+    }
+
+    private fun isPotentialRemoteStartBuffer(text: String): Boolean {
+        val trimmed = text.trimStart()
+        if (trimmed.isEmpty()) return false
+        return if (trimmed.length <= REMOTE_START_PREFIX.length) {
+            REMOTE_START_PREFIX.startsWith(trimmed)
+        } else {
+            trimmed.startsWith(REMOTE_START_PREFIX)
+        }
+    }
+
+    private fun tryConsumeRemoteStartCommand(runtime: SessionRuntime): Long? {
+        val text = runtime.controlBuffer.toString()
+        val start = text.indexOfFirst { !it.isWhitespace() }
+        if (start == -1) return null
+        if (!text.startsWith(REMOTE_START_PREFIX, start, false)) return null
+
+        val digitsStart = start + REMOTE_START_PREFIX.length
+        var i = digitsStart
+        while (i < text.length && text[i].isDigit()) i++
+        if (i == digitsStart) return null
+
+        val digits = text.substring(digitsStart, i)
+        if (i < text.length) {
+            // Protocol: START:n; (semicolon terminator). Ignore legacy formats without ';'.
+            if (text[i] != ';') {
+                runtime.controlBuffer.clear()
+                return null
+            }
+            runtime.controlBuffer.clear()
+            return digits.toLongOrNull()
+        }
+
+        // Wait for ';' to arrive in a future chunk.
+        return null
     }
 
     private fun startReceiveLoop(key: String) {
@@ -500,15 +733,74 @@ class SppViewModel(app: Application) : AndroidViewModel(app) {
         runtime.receiveJob = viewModelScope.launch(Dispatchers.IO) {
             while (isActive) {
                 val session = _uiState.value.sessions[key] ?: break
+                if (session.speedTestRunning && runtime.controlBuffer.isNotEmpty()) {
+                    runtime.controlBuffer.clear()
+                }
                 val buf = mgr.receive(session.payloadSize)
                 if (buf == null) break
                 if (buf.isNotEmpty()) {
-                    val muteConsole = session.speedTestWindowOpen || session.speedTestRunning
-                    if (!muteConsole) {
+                    var consumedByControl = false
+                    if (!session.speedTestRunning) {
+                        val decoded = runCatching { buf.toString(Charsets.UTF_8) }.getOrNull()
+                        val isValidTextChunk =
+                            decoded != null &&
+                                    decoded.isNotEmpty() &&
+                                    decoded.length <= 64 &&
+                                    !decoded.contains('\uFFFD') &&
+                                    decoded.all { ch -> ch.isWhitespace() || ch.code in 0x20..0x7E }
+                        if (isValidTextChunk) {
+                            val shouldBuffer =
+                                runtime.controlBuffer.isNotEmpty() || isPotentialRemoteStartBuffer(
+                                    decoded
+                                )
+                            if (shouldBuffer) {
+                                runtime.controlBuffer.append(decoded)
+                                if (runtime.controlBuffer.length > 256) {
+                                    runtime.controlBuffer.delete(
+                                        0,
+                                        runtime.controlBuffer.length - 256
+                                    )
+                                }
+
+                                val n = tryConsumeRemoteStartCommand(runtime)
+                                if (n != null && n > 0) {
+                                    viewModelScope.launch { startRemoteRxSpeedTest(key, n) }
+                                    return@launch
+                                }
+
+                                val bufferText = runtime.controlBuffer.toString()
+                                val potential = isPotentialRemoteStartBuffer(bufferText)
+                                if (!potential) {
+                                    runtime.controlBuffer.clear()
+                                } else {
+                                    consumedByControl =
+                                        bufferText.trimStart().startsWith(REMOTE_START_PREFIX)
+                                }
+                            }
+                        } else if (runtime.controlBuffer.isNotEmpty()) {
+                            runtime.controlBuffer.clear()
+                        }
+                    }
+                    val muteConsole =
+                        session.muteConsoleDuringTest &&
+                                (session.speedTestWindowOpen || session.speedTestRunning)
+                    if (!consumedByControl && !muteConsole) {
                         val text = formatIncoming(buf, session.parseIncomingAsText)
                         appendChat(key, SppChatDirection.In, text)
                     }
                 } else {
+                    if (!session.speedTestRunning && runtime.controlBuffer.isNotEmpty()) {
+                        val n = tryConsumeRemoteStartCommand(runtime)
+                        if (n != null && n > 0) {
+                            viewModelScope.launch { startRemoteRxSpeedTest(key, n) }
+                            return@launch
+                        }
+                        if (!isPotentialRemoteStartBuffer(runtime.controlBuffer.toString())) {
+                            runtime.controlBuffer.clear()
+                        }
+                    } else if (session.speedTestRunning && runtime.controlBuffer.isNotEmpty()) {
+                        runtime.controlBuffer.clear()
+                    }
                     delay(10)
                 }
             }
