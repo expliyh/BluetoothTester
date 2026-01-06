@@ -12,6 +12,7 @@ android {
 
     val versionNameOverride =
         providers.gradleProperty("versionNameOverride").orNull?.takeIf { it.isNotBlank() }
+    val enableAbiSplits = providers.gradleProperty("enableAbiSplits").orNull == "true"
 
     defaultConfig {
         applicationId = "top.expli.bluetoothtester"
@@ -21,6 +22,15 @@ android {
         versionName = versionNameOverride ?: "0.0.1-alpha"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    splits {
+        abi {
+            isEnable = enableAbiSplits
+            reset()
+            include("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
+            isUniversalApk = enableAbiSplits
+        }
     }
 
     val keystorePath = System.getenv("ANDROID_KEYSTORE_PATH")
