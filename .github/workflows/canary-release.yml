@@ -62,7 +62,7 @@ jobs:
         shell: bash
 
       - name: Build canary artifacts
-        run: ./gradlew assembleDebug assembleRelease bundleDebug bundleRelease --stacktrace -PversionNameOverride=${{ steps.version.outputs.version }}
+        run: ./gradlew assembleDebug assembleRelease bundleDebug bundleRelease --stacktrace -PversionNameOverride=${{ steps.version.outputs.version }} -PenableAbiSplits=true
         env:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
@@ -72,15 +72,29 @@ jobs:
         shell: bash
         run: |
           mkdir -p dist
-          DEBUG_APK_PATH="$(ls -1 app/build/outputs/apk/debug/*.apk | head -n 1)"
-          RELEASE_APK_PATH="$(ls -1 app/build/outputs/apk/release/*.apk | head -n 1)"
-          DEBUG_AAB_PATH="$(ls -1 app/build/outputs/bundle/debug/*.aab | head -n 1)"
-          RELEASE_AAB_PATH="$(ls -1 app/build/outputs/bundle/release/*.aab | head -n 1)"
+          for apk in app/build/outputs/apk/debug/*.apk; do
+            base="$(basename "${apk}")"
+            base="${base#app-}"
+            cp "${apk}" "dist/BluetoothTester-${base%.apk}-${VERSION}.apk"
+          done
 
-          cp "${DEBUG_APK_PATH}" "dist/BluetoothTester-debug-${VERSION}.apk"
-          cp "${RELEASE_APK_PATH}" "dist/BluetoothTester-release-${VERSION}.apk"
-          cp "${DEBUG_AAB_PATH}" "dist/BluetoothTester-debug-${VERSION}.aab"
-          cp "${RELEASE_AAB_PATH}" "dist/BluetoothTester-release-${VERSION}.aab"
+          for apk in app/build/outputs/apk/release/*.apk; do
+            base="$(basename "${apk}")"
+            base="${base#app-}"
+            cp "${apk}" "dist/BluetoothTester-${base%.apk}-${VERSION}.apk"
+          done
+
+          for aab in app/build/outputs/bundle/debug/*.aab; do
+            base="$(basename "${aab}")"
+            base="${base#app-}"
+            cp "${aab}" "dist/BluetoothTester-${base%.aab}-${VERSION}.aab"
+          done
+
+          for aab in app/build/outputs/bundle/release/*.aab; do
+            base="$(basename "${aab}")"
+            base="${base#app-}"
+            cp "${aab}" "dist/BluetoothTester-${base%.aab}-${VERSION}.aab"
+          done
 
       - name: Publish canary release
         uses: softprops/action-gh-release@v2
