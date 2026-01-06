@@ -10,12 +10,15 @@ android {
         version = release(36)
     }
 
+    val versionNameOverride =
+        providers.gradleProperty("versionNameOverride").orNull?.takeIf { it.isNotBlank() }
+
     defaultConfig {
         applicationId = "top.expli.bluetoothtester"
         minSdk = 33
         targetSdk = 36
         versionCode = 1
-        versionName = "0.0.1-alpha"
+        versionName = versionNameOverride ?: "0.0.1-alpha"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
