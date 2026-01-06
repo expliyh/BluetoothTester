@@ -32,6 +32,12 @@ jobs:
           echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"
           echo "VERSION=${VERSION}" >> "${GITHUB_ENV}"
 
+      - name: Compute release timestamp
+        shell: bash
+        run: |
+          RELEASE_TS="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          echo "RELEASE_TS=${RELEASE_TS}" >> "${GITHUB_ENV}"
+
       - name: Set up JDK
         uses: actions/setup-java@v4
         with:
@@ -100,7 +106,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.version }}
-          name: canary-release ${{ steps.version.outputs.version }}
+          name: ${{ env.RELEASE_TS }} canary-release ${{ steps.version.outputs.version }}
           prerelease: true
           files: dist/*
           fail_on_unmatched_files: true
