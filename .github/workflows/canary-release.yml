@@ -61,8 +61,8 @@ jobs:
           echo "ANDROID_KEYSTORE_PATH=/home/runner/work/keystore.jks" >> $GITHUB_ENV
         shell: bash
 
-      - name: Build canary APK
-        run: ./gradlew assembleRelease --stacktrace -PversionNameOverride=${{ steps.version.outputs.version }}
+      - name: Build canary artifacts
+        run: ./gradlew assembleDebug assembleRelease bundleDebug bundleRelease --stacktrace -PversionNameOverride=${{ steps.version.outputs.version }}
         env:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
@@ -72,14 +72,21 @@ jobs:
         shell: bash
         run: |
           mkdir -p dist
-          APK_PATH="$(ls -1 app/build/outputs/apk/release/*.apk | head -n 1)"
-          cp "${APK_PATH}" "dist/BluetoothTester-${VERSION}.apk"
+          DEBUG_APK_PATH="$(ls -1 app/build/outputs/apk/debug/*.apk | head -n 1)"
+          RELEASE_APK_PATH="$(ls -1 app/build/outputs/apk/release/*.apk | head -n 1)"
+          DEBUG_AAB_PATH="$(ls -1 app/build/outputs/bundle/debug/*.aab | head -n 1)"
+          RELEASE_AAB_PATH="$(ls -1 app/build/outputs/bundle/release/*.aab | head -n 1)"
+
+          cp "${DEBUG_APK_PATH}" "dist/BluetoothTester-debug-${VERSION}.apk"
+          cp "${RELEASE_APK_PATH}" "dist/BluetoothTester-release-${VERSION}.apk"
+          cp "${DEBUG_AAB_PATH}" "dist/BluetoothTester-debug-${VERSION}.aab"
+          cp "${RELEASE_AAB_PATH}" "dist/BluetoothTester-release-${VERSION}.aab"
 
       - name: Publish canary release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.version }}
-          name: cannary-release ${{ steps.version.outputs.version }}
+          name: canary-release ${{ steps.version.outputs.version }}
           prerelease: true
           files: dist/*
           fail_on_unmatched_files: true
