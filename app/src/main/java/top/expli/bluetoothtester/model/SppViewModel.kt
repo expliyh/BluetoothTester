@@ -736,8 +736,7 @@ class SppViewModel(app: Application) : AndroidViewModel(app) {
                 if (session.speedTestRunning && runtime.controlBuffer.isNotEmpty()) {
                     runtime.controlBuffer.clear()
                 }
-                val buf = mgr.receive(session.payloadSize)
-                if (buf == null) break
+                val buf = mgr.receive(session.payloadSize) ?: break
                 if (buf.isNotEmpty()) {
                     var consumedByControl = false
                     if (!session.speedTestRunning) {
