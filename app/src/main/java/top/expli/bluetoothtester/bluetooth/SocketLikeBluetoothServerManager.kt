@@ -47,6 +47,7 @@ abstract class SocketLikeBluetoothServerManager(
     }
 
     /** 服务端不主动连接，保持空实现。 */
+    @Suppress("EmptyMethod")
     override fun connect() { /* no-op for server */
     }
 
