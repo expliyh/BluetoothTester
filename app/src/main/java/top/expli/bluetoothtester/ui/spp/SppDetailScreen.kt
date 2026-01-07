@@ -45,6 +45,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -132,7 +133,7 @@ fun SppDetailScreen(
         val density = LocalDensity.current
         val imeVisible = WindowInsets.ime.getBottom(density) > 5
         val imeGap = if (imeVisible) 8.dp else 0.dp
-        var composerHeightPx by remember { mutableStateOf(0) }
+        var composerHeightPx by remember { mutableIntStateOf(0) }
         val composerHeightDp = with(density) { composerHeightPx.toDp() }
 
         Box(modifier = Modifier.fillMaxSize()) {

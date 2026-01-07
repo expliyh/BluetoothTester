@@ -1,6 +1,7 @@
 package top.expli.bluetoothtester.privilege.shizuku
 
 import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothManager
 import android.content.Context
 import kotlinx.coroutines.delay
 
@@ -11,7 +12,9 @@ data class ToggleResult(val success: Boolean, val message: String? = null)
 data class CommandResult(val success: Boolean, val exitCode: Int? = null, val error: String? = null)
 
 class BluetoothToggleController(private val context: Context) {
-    private val adapter: BluetoothAdapter? by lazy { BluetoothAdapter.getDefaultAdapter() }
+    private val adapter: BluetoothAdapter? by lazy {
+        context.getSystemService(BluetoothManager::class.java)?.adapter
+    }
 
     fun currentState(): BluetoothState {
         val state = adapter?.state ?: return BluetoothState.Unavailable

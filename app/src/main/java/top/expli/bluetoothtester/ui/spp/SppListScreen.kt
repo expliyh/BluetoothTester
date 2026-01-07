@@ -334,4 +334,4 @@ fun AddSppDeviceDialog(
     )
 }
 
-fun SppDevice.uniqueKey(): String = if (address.isNotBlank()) address else uuid
+fun SppDevice.uniqueKey(): String = address.ifBlank { uuid }

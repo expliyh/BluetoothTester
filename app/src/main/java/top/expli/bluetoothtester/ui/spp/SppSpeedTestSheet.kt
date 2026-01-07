@@ -42,8 +42,8 @@ fun SppSpeedTestSheet(
     onToggleSpeedTest: () -> Unit,
     onToggleSpeedTestMode: () -> Unit,
     onMuteConsoleDuringTestChange: (Boolean) -> Unit,
-    onSpeedTestPayloadChange: (String) -> Unit = {},
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onSpeedTestPayloadChange: (String) -> Unit = {}
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var showPayloadDialog by remember { mutableStateOf(false) }
@@ -102,7 +102,7 @@ fun SppSpeedTestSheet(
                     headlineContent = { Text(selected.name) },
                     supportingContent = {
                         Text(
-                            if (selected.address.isBlank()) selected.uuid else selected.address,
+                            selected.address.ifBlank { selected.uuid },
                             fontFamily = FontFamily.Monospace
                         )
                     }

@@ -31,9 +31,8 @@ import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
 
 class SppViewModel(app: Application) : AndroidViewModel(app) {
-    private val ctx = app.applicationContext
     private val adapter: BluetoothAdapter? =
-        ctx.getSystemService(BluetoothManager::class.java)?.adapter
+        getApplication<Application>().getSystemService(BluetoothManager::class.java)?.adapter
 
     private val _uiState = MutableStateFlow(SppUiState())
     val uiState: StateFlow<SppUiState> = _uiState.asStateFlow()
@@ -70,7 +69,7 @@ class SppViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         viewModelScope.launch {
-            SppDeviceStore.observe(ctx).collect { list ->
+            SppDeviceStore.observe(getApplication<Application>()).collect { list ->
                 _uiState.update { state ->
                     val sessions = state.sessions.mapValues { (key, session) ->
                         val updatedDevice = list.firstOrNull { it.key() == key } ?: session.device
@@ -139,7 +138,7 @@ class SppViewModel(app: Application) : AndroidViewModel(app) {
                 val idx = indexOfFirst { it.key() == device.key() }
                 if (idx >= 0) this[idx] = device else add(device)
             }
-            SppDeviceStore.save(ctx, newList)
+            SppDeviceStore.save(getApplication<Application>(), newList)
         }
 
         val key = device.key()
@@ -190,7 +189,7 @@ class SppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             val newList =
                 _uiState.value.registered.filterNot { it.address == address || it.uuid == address }
-            SppDeviceStore.save(ctx, newList)
+            SppDeviceStore.save(getApplication<Application>(), newList)
             _uiState.update { state ->
                 val selectedKey = if (state.selectedKey == address) null else state.selectedKey
                 state.copy(
@@ -226,7 +225,8 @@ class SppViewModel(app: Application) : AndroidViewModel(app) {
                     updateSession(key) { it.copy(lastError = "无效的地址") }
                     return
                 }
-                val mgr = SppClientManager(ctx, dev, uuid)
+                val mgr =
+                    SppClientManager(getApplication<Application>().applicationContext, dev, uuid)
                 runtime.client = mgr
                 runtime.server = null
                 updateSession(key) { it.copy(connectionState = SppConnectionState.Connecting) }
@@ -244,7 +244,7 @@ class SppViewModel(app: Application) : AndroidViewModel(app) {
                     }
                 }
             } else {
-                val mgr = SppServerManager(ctx, uuid)
+                val mgr = SppServerManager(getApplication<Application>().applicationContext, uuid)
                 runtime.server = mgr
                 runtime.client = null
                 updateSession(key) { it.copy(connectionState = SppConnectionState.Listening) }
@@ -736,8 +736,7 @@ class SppViewModel(app: Application) : AndroidViewModel(app) {
                 if (session.speedTestRunning && runtime.controlBuffer.isNotEmpty()) {
                     runtime.controlBuffer.clear()
                 }
-                val buf = mgr.receive(session.payloadSize)
-                if (buf == null) break
+                val buf = mgr.receive(session.payloadSize) ?: break
                 if (buf.isNotEmpty()) {
                     var consumedByControl = false
                     if (!session.speedTestRunning) {
@@ -856,4 +855,4 @@ class SppViewModel(app: Application) : AndroidViewModel(app) {
     }
 }
 
-private fun SppDevice.key(): String = if (address.isNotBlank()) address else uuid
+private fun SppDevice.key(): String = address.ifBlank { uuid }
