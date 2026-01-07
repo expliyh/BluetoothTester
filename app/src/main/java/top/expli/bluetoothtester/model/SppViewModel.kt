@@ -856,4 +856,4 @@ class SppViewModel(app: Application) : AndroidViewModel(app) {
     }
 }
 
-private fun SppDevice.key(): String = if (address.isNotBlank()) address else uuid
+private fun SppDevice.key(): String = address.ifBlank { uuid }

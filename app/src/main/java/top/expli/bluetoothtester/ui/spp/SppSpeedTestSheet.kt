@@ -102,7 +102,7 @@ fun SppSpeedTestSheet(
                     headlineContent = { Text(selected.name) },
                     supportingContent = {
                         Text(
-                            if (selected.address.isBlank()) selected.uuid else selected.address,
+                            selected.address.ifBlank { selected.uuid },
                             fontFamily = FontFamily.Monospace
                         )
                     }
