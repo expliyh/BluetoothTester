@@ -97,8 +97,7 @@ fun SppScreen(onBackClick: () -> Unit) {
         if (granted) {
             pendingAction?.invoke()
         } else {
-            val act = activity
-            if (act != null && !BluetoothPermissions.shouldShowRationale(act)) {
+            if (activity != null && !BluetoothPermissions.shouldShowRationale(activity)) {
                 showPermissionSettingsDialog = true
             } else {
                 scope.launch { snackbarHostState.showSnackbar("需要蓝牙权限才能继续") }
@@ -112,8 +111,7 @@ fun SppScreen(onBackClick: () -> Unit) {
             return
         }
         pendingBluetoothAction.set(action)
-        val act = activity
-        if (act != null && BluetoothPermissions.shouldShowRationale(act)) {
+        if (activity != null && BluetoothPermissions.shouldShowRationale(activity)) {
             showPermissionRationaleDialog = true
         } else {
             bluetoothPermissionLauncher.launch(BluetoothPermissions.required)

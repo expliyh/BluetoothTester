@@ -85,18 +85,17 @@ fun SppDetailScreen(
     onConnectFromBondedDevice: () -> Unit = {},
     onScrollToLatest: (() -> Unit) -> Unit = {}  // 向外暴露滚动函数
 ) {
-    val session = sessionState
-    if (session == null) {
+    if (sessionState == null) {
         Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text("未选择 Socket", style = MaterialTheme.typography.titleMedium)
         }
         return
     }
-    val selected = session.device
+    val selected = sessionState.device
 
     var showActions by remember { mutableStateOf(false) }
     var showPayloadDialog by remember { mutableStateOf(false) }
-    val showSpeedTestSheet = session.speedTestWindowOpen
+    val showSpeedTestSheet = sessionState.speedTestWindowOpen
 
     fun openSpeedTestSheet() {
         onSpeedTestWindowOpenChange(true)
@@ -118,7 +117,7 @@ fun SppDetailScreen(
     DisposableEffect(Unit) {
         onScrollToLatest {
             coroutineScope.launch {
-                if (session.chat.isNotEmpty()) {
+                if (sessionState.chat.isNotEmpty()) {
                     listState.animateScrollToItem(0)
                 }
             }
@@ -137,7 +136,7 @@ fun SppDetailScreen(
         val composerHeightDp = with(density) { composerHeightPx.toDp() }
 
         Box(modifier = Modifier.fillMaxSize()) {
-            if (session.chat.isEmpty()) {
+            if (sessionState.chat.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text("暂无消息", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
@@ -154,7 +153,7 @@ fun SppDetailScreen(
                     ),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(session.chat, key = { it.id }) { item ->
+                    items(sessionState.chat, key = { it.id }) { item ->
                         ChatLine(item)
                     }
                 }
@@ -172,15 +171,15 @@ fun SppDetailScreen(
             ) {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     if (
-                        session.speedTestRunning ||
-                        session.speedTestTxAvgBps != null ||
-                        session.speedTestRxAvgBps != null
+                        sessionState.speedTestRunning ||
+                        sessionState.speedTestTxAvgBps != null ||
+                        sessionState.speedTestRxAvgBps != null
                     ) {
-                        val title = if (session.speedTestRunning) "测速中" else "上次测速"
-                        val txInstant = session.speedTestTxInstantBps?.let(::formatBps) ?: "--"
-                        val txAvg = session.speedTestTxAvgBps?.let(::formatBps) ?: "--"
-                        val rxInstant = session.speedTestRxInstantBps?.let(::formatBps) ?: "--"
-                        val rxAvg = session.speedTestRxAvgBps?.let(::formatBps) ?: "--"
+                        val title = if (sessionState.speedTestRunning) "测速中" else "上次测速"
+                        val txInstant = sessionState.speedTestTxInstantBps?.let(::formatBps) ?: "--"
+                        val txAvg = sessionState.speedTestTxAvgBps?.let(::formatBps) ?: "--"
+                        val rxInstant = sessionState.speedTestRxInstantBps?.let(::formatBps) ?: "--"
+                        val rxAvg = sessionState.speedTestRxAvgBps?.let(::formatBps) ?: "--"
                         Text(
                             "$title · TX $txInstant / $txAvg · RX $rxInstant / $rxAvg",
                             style = MaterialTheme.typography.labelSmall,
@@ -204,18 +203,18 @@ fun SppDetailScreen(
                         }
 
                         OutlinedTextField(
-                            value = session.sendingText,
+                            value = sessionState.sendingText,
                             onValueChange = onTextChange,
                             modifier = Modifier.weight(1f),
                             placeholder = { Text("输入…") },
                             maxLines = 4
                         )
 
-                        val speedTesting = session.speedTestRunning
+                        val speedTesting = sessionState.speedTestRunning
                         LongPressIconButton(
                             icon = if (speedTesting) Icons.Default.Stop else Icons.AutoMirrored.Filled.Send,
                             contentDescription = if (speedTesting) "停止测速" else "发送",
-                            enabled = speedTesting || session.connectionState == SppConnectionState.Connected,
+                            enabled = speedTesting || sessionState.connectionState == SppConnectionState.Connected,
                             onClick = if (speedTesting) onToggleSpeedTest else onSend,
                             onLongClick = {
                                 openSpeedTestSheet()
@@ -234,8 +233,8 @@ fun SppDetailScreen(
             onDismissRequest = { showActions = false }
         ) {
             val active =
-                session.connectionState == SppConnectionState.Connected || session.connectionState == SppConnectionState.Listening
-            val connecting = session.connectionState == SppConnectionState.Connecting
+                sessionState.connectionState == SppConnectionState.Connected || sessionState.connectionState == SppConnectionState.Listening
+            val connecting = sessionState.connectionState == SppConnectionState.Connecting
             val connectTitle = when (selected.role) {
                 SppRole.Client -> if (active) "断开连接" else "连接"
                 SppRole.Server -> if (active) "停止监听" else "开始监听"
@@ -248,7 +247,7 @@ fun SppDetailScreen(
 
             ListItem(
                 headlineContent = { Text(connectTitle) },
-                supportingContent = { Text("状态: ${session.connectionState.label()}") },
+                supportingContent = { Text("状态: ${sessionState.connectionState.label()}") },
                 leadingContent = { Icon(connectIcon, contentDescription = null) },
                 modifier = Modifier.padding(horizontal = 6.dp),
                 trailingContent = {
@@ -277,13 +276,13 @@ fun SppDetailScreen(
             ListItem(
                 headlineContent = { Text("解析接收数据") },
                 supportingContent = {
-                    Text(if (session.parseIncomingAsText) "UTF-8 文本（非文本则显示 HEX）" else "HEX 原始数据")
+                    Text(if (sessionState.parseIncomingAsText) "UTF-8 文本（非文本则显示 HEX）" else "HEX 原始数据")
                 },
                 leadingContent = { Icon(Icons.Default.TextFields, contentDescription = null) },
                 modifier = Modifier.padding(horizontal = 6.dp),
                 trailingContent = {
                     Switch(
-                        checked = session.parseIncomingAsText,
+                        checked = sessionState.parseIncomingAsText,
                         onCheckedChange = onParseIncomingAsTextChange
                     )
                 }
@@ -316,7 +315,7 @@ fun SppDetailScreen(
 
             ListItem(
                 headlineContent = { Text("接收缓冲大小") },
-                supportingContent = { Text("${session.payloadSize} 字节") },
+                supportingContent = { Text("${sessionState.payloadSize} 字节") },
                 leadingContent = { Icon(Icons.Default.Tune, contentDescription = null) },
                 modifier = Modifier.padding(horizontal = 6.dp),
                 trailingContent = {
@@ -365,7 +364,7 @@ fun SppDetailScreen(
     }
 
     if (showPayloadDialog) {
-        var input by remember { mutableStateOf(session.payloadSize.toString()) }
+        var input by remember { mutableStateOf(sessionState.payloadSize.toString()) }
         @Suppress("ASSIGNED_VALUE_IS_NEVER_READ")
         AlertDialog(
             onDismissRequest = { showPayloadDialog = false },
@@ -390,7 +389,7 @@ fun SppDetailScreen(
 
     if (showSpeedTestSheet) {
         SppSpeedTestSheet(
-            session = session,
+            session = sessionState,
             onDismissRequest = { closeSpeedTestSheet() },
             onToggleSpeedTest = onToggleSpeedTest,
             onToggleSpeedTestMode = onToggleSpeedTestMode,
