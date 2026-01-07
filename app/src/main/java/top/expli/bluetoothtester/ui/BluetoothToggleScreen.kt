@@ -261,11 +261,11 @@ private fun NumberField(
     suffix: String,
     onValueChange: (Int) -> Unit
 ) {
-    @Suppress("UNUSED_VALUE")
     var text by remember(value) { mutableStateOf(value.toString()) }
     OutlinedTextField(
         value = text,
         onValueChange = {
+            @Suppress("ASSIGNED_VALUE_IS_NEVER_READ")
             text = it
             val parsed = it.toIntOrNull()
             if (parsed != null && parsed >= 0) onValueChange(parsed)

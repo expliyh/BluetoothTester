@@ -2,7 +2,6 @@ package top.expli.bluetoothtester.privilege.shizuku
 
 import android.os.RemoteException
 import android.util.Log
-import top.expli.bluetoothtester.privilege.shizuku.IUserService
 import java.io.BufferedReader
 import java.io.IOException
 import java.io.InputStream

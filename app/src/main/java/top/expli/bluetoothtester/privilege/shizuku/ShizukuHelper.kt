@@ -1,6 +1,5 @@
 package top.expli.bluetoothtester.privilege.shizuku
 
-import top.expli.bluetoothtester.BuildConfig
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -11,16 +10,16 @@ import android.util.Log
 import android.widget.Toast
 import androidx.core.net.toUri
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.withContext
 import rikka.shizuku.Shizuku
 import rikka.shizuku.Shizuku.OnBinderDeadListener
 import rikka.shizuku.Shizuku.OnBinderReceivedListener
 import rikka.shizuku.Shizuku.UserServiceArgs
+import top.expli.bluetoothtester.BuildConfig
 import top.expli.bluetoothtester.privilege.PrivilegeHelper
-import top.expli.bluetoothtester.privilege.shizuku.IUserService
 
 
 enum class ShizukuState { NotInstalled, NotRunning, NoPermission, Granted }

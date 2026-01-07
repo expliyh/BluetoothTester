@@ -97,8 +97,7 @@ fun SppScreen(onBackClick: () -> Unit) {
         if (granted) {
             pendingAction?.invoke()
         } else {
-            val act = activity
-            if (act != null && !BluetoothPermissions.shouldShowRationale(act)) {
+            if (activity != null && !BluetoothPermissions.shouldShowRationale(activity)) {
                 showPermissionSettingsDialog = true
             } else {
                 scope.launch { snackbarHostState.showSnackbar("需要蓝牙权限才能继续") }
@@ -112,8 +111,7 @@ fun SppScreen(onBackClick: () -> Unit) {
             return
         }
         pendingBluetoothAction.set(action)
-        val act = activity
-        if (act != null && BluetoothPermissions.shouldShowRationale(act)) {
+        if (activity != null && BluetoothPermissions.shouldShowRationale(activity)) {
             showPermissionRationaleDialog = true
         } else {
             bluetoothPermissionLauncher.launch(BluetoothPermissions.required)
@@ -266,6 +264,7 @@ fun SppScreen(onBackClick: () -> Unit) {
             }
 
             composable<SppRoute.Detail> {
+                @Suppress("ASSIGNED_VALUE_IS_NEVER_READ")
                 SppDetailScreen(
                     modifier = Modifier
                         .fillMaxSize()
@@ -329,6 +328,7 @@ fun SppScreen(onBackClick: () -> Unit) {
     if (showPermissionRationaleDialog) {
         AlertDialog(
             onDismissRequest = {
+                @Suppress("ASSIGNED_VALUE_IS_NEVER_READ")
                 showPermissionRationaleDialog = false
                 pendingBluetoothAction.set(null)
             },
@@ -336,12 +336,14 @@ fun SppScreen(onBackClick: () -> Unit) {
             text = { Text("SPP 连接/监听需要授予“附近设备”相关的蓝牙连接与扫描权限。") },
             confirmButton = {
                 TextButton(onClick = {
+                    @Suppress("ASSIGNED_VALUE_IS_NEVER_READ")
                     showPermissionRationaleDialog = false
                     bluetoothPermissionLauncher.launch(BluetoothPermissions.required)
                 }) { Text("去授权") }
             },
             dismissButton = {
                 TextButton(onClick = {
+                    @Suppress("ASSIGNED_VALUE_IS_NEVER_READ")
                     showPermissionRationaleDialog = false
                     pendingBluetoothAction.set(null)
                 }) { Text("取消") }
@@ -350,6 +352,7 @@ fun SppScreen(onBackClick: () -> Unit) {
     }
 
     if (showPermissionSettingsDialog) {
+        @Suppress("ASSIGNED_VALUE_IS_NEVER_READ")
         AlertDialog(
             onDismissRequest = { showPermissionSettingsDialog = false },
             title = { Text("权限被拒绝") },
@@ -374,10 +377,12 @@ fun SppScreen(onBackClick: () -> Unit) {
         BondedDevicePickerSheet(
             devices = bondedDevices,
             onDismissRequest = {
+                @Suppress("ASSIGNED_VALUE_IS_NEVER_READ")
                 showBondedDevicePicker = false
                 bondedDevicePickerOnSelect.set(null)
             },
             onSelect = { picked ->
+                @Suppress("ASSIGNED_VALUE_IS_NEVER_READ")
                 showBondedDevicePicker = false
                 bondedDevicePickerOnSelect.getAndSet(null)?.invoke(picked)
             }
