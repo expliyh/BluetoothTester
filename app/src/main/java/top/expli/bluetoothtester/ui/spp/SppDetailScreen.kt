@@ -159,7 +159,7 @@ fun SppDetailScreen(
                     }
                 }
             }
-
+            @Suppress("ASSIGNED_VALUE_IS_NEVER_READ")
             Surface(
                 tonalElevation = 0.dp,
                 shadowElevation = 0.dp,
@@ -229,6 +229,7 @@ fun SppDetailScreen(
     }
 
     if (showActions) {
+        @Suppress("ASSIGNED_VALUE_IS_NEVER_READ")
         ModalBottomSheet(
             onDismissRequest = { showActions = false }
         ) {
@@ -365,6 +366,7 @@ fun SppDetailScreen(
 
     if (showPayloadDialog) {
         var input by remember { mutableStateOf(session.payloadSize.toString()) }
+        @Suppress("ASSIGNED_VALUE_IS_NEVER_READ")
         AlertDialog(
             onDismissRequest = { showPayloadDialog = false },
             title = { Text("接收缓冲大小") },

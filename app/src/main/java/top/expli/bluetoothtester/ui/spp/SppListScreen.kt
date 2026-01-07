@@ -308,6 +308,7 @@ fun AddSppDeviceDialog(
             }
         },
         confirmButton = {
+            @Suppress("ASSIGNED_VALUE_IS_NEVER_READ")
             TextButton(onClick = {
                 if (uuid.isBlank()) {
                     error = "UUID 不能为空"; return@TextButton

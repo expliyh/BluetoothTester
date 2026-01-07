@@ -101,6 +101,7 @@ fun SettingsScreen(
 
                 item {
                     var notificationsEnabled by remember { mutableStateOf(true) }
+                    @Suppress("ASSIGNED_VALUE_IS_NEVER_READ")
                     SettingsToggleItem(
                         icon = Icons.Default.Notifications,
                         title = "通知",

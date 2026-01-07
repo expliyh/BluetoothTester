@@ -219,6 +219,7 @@ fun SppSpeedTestSheet(
     }
 
     if (showPayloadDialog) {
+        @Suppress("ASSIGNED_VALUE_IS_NEVER_READ")
         PayloadDialog(
             currentPayload = session.speedTestPayload,
             onConfirm = { newPayload ->
