@@ -31,12 +31,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -176,22 +172,30 @@ private fun ShizukuCard(
             when (state) {
                 ShizukuState.NotInstalled -> {
                     StatusText("未安装 Shizuku，点击打开管理器安装", MaterialTheme.colorScheme.error)
-                    PrimaryButton(text = "打开 Shizuku 管理器", enabled = true, onClick = onOpenApp)
+                    Button(onClick = onOpenApp) {
+                        Text(text = "打开 Shizuku 管理器")
+                    }
                 }
 
                 ShizukuState.NotRunning -> {
                     StatusText("Shizuku 未运行，请在管理器中启动", MaterialTheme.colorScheme.error)
-                    PrimaryButton(text = "打开 Shizuku 管理器", enabled = true, onClick = onOpenApp)
+                    Button(onClick = onOpenApp) {
+                        Text(text = "打开 Shizuku 管理器")
+                    }
                 }
 
                 ShizukuState.NoPermission -> {
                     StatusText("未授权，需请求 Shizuku 权限", MaterialTheme.colorScheme.tertiary)
-                    PrimaryButton(text = "请求授权", enabled = true, onClick = onRequestPermission)
+                    Button(onClick = onRequestPermission) {
+                        Text(text = "请求授权")
+                    }
                 }
 
                 ShizukuState.Granted -> {
                     StatusText("已授权", MaterialTheme.colorScheme.primary)
-                    PrimaryButton(text = "打开 Shizuku 管理器", enabled = true, onClick = onOpenApp)
+                    Button(onClick = onOpenApp) {
+                        Text(text = "打开 Shizuku 管理器")
+                    }
                 }
             }
         }
@@ -282,15 +286,4 @@ private fun StatusText(text: String, color: Color) {
         style = MaterialTheme.typography.bodyMedium,
         color = color
     )
-}
-
-@Composable
-private fun PrimaryButton(text: String, enabled: Boolean = true, onClick: () -> Unit) {
-    Button(
-        onClick = onClick,
-        enabled = enabled,
-        shape = RoundedCornerShape(10.dp)
-    ) {
-        Text(text = text)
-    }
 }
