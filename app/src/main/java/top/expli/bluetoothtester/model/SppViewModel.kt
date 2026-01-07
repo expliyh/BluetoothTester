@@ -138,7 +138,7 @@ class SppViewModel(app: Application) : AndroidViewModel(app) {
                 val idx = indexOfFirst { it.key() == device.key() }
                 if (idx >= 0) this[idx] = device else add(device)
             }
-            SppDeviceStore.save(getApplication<Application>(), newList)
+            SppDeviceStore.save(getApplication(), newList)
         }
 
         val key = device.key()
@@ -189,7 +189,7 @@ class SppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             val newList =
                 _uiState.value.registered.filterNot { it.address == address || it.uuid == address }
-            SppDeviceStore.save(getApplication<Application>(), newList)
+            SppDeviceStore.save(getApplication(), newList)
             _uiState.update { state ->
                 val selectedKey = if (state.selectedKey == address) null else state.selectedKey
                 state.copy(
