@@ -42,8 +42,8 @@ fun SppSpeedTestSheet(
     onToggleSpeedTest: () -> Unit,
     onToggleSpeedTestMode: () -> Unit,
     onMuteConsoleDuringTestChange: (Boolean) -> Unit,
-    onSpeedTestPayloadChange: (String) -> Unit = {},
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onSpeedTestPayloadChange: (String) -> Unit = {}
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var showPayloadDialog by remember { mutableStateOf(false) }
