@@ -18,8 +18,8 @@ import rikka.shizuku.Shizuku
 import rikka.shizuku.Shizuku.OnBinderDeadListener
 import rikka.shizuku.Shizuku.OnBinderReceivedListener
 import rikka.shizuku.Shizuku.UserServiceArgs
-import top.expli.bluetoothtester.BuildConfig
 import top.expli.bluetoothtester.privilege.PrivilegeHelper
+import top.expli.bluetoothtester.util.AppRuntimeInfo
 
 
 enum class ShizukuState { NotInstalled, NotRunning, NoPermission, Granted }
@@ -40,15 +40,22 @@ object ShizukuHelper : PrivilegeHelper {
 
     private var appContext: Context? = null
 
-    private val userServiceArgs: UserServiceArgs = UserServiceArgs(
-        ComponentName(
-            BuildConfig.APPLICATION_ID, UserService::class.java.getName()
+    private var userServiceArgs: UserServiceArgs? = null
+
+    private fun buildUserServiceArgs(context: Context): UserServiceArgs {
+        val versionCode = AppRuntimeInfo.versionCode(context)
+            .coerceAtMost(Int.MAX_VALUE.toLong())
+            .toInt()
+        val debuggable = AppRuntimeInfo.isDebuggable(context)
+        val pkg = context.applicationContext.packageName
+        return UserServiceArgs(
+            ComponentName(pkg, UserService::class.java.name)
         )
-    )
-        .daemon(false)
-        .processNameSuffix("adb_service")
-        .debuggable(BuildConfig.DEBUG)
-        .version(BuildConfig.VERSION_CODE)
+            .daemon(false)
+            .processNameSuffix("adb_service")
+            .debuggable(debuggable)
+            .version(versionCode)
+    }
 
     private val serviceConnection: ServiceConnection = object : ServiceConnection {
         override fun onServiceConnected(componentName: ComponentName?, iBinder: IBinder?) {
@@ -96,6 +103,7 @@ object ShizukuHelper : PrivilegeHelper {
         if (initialized) return
         initialized = true
         appContext = context.applicationContext
+        userServiceArgs = buildUserServiceArgs(appContext!!)
         refreshState(appContext!!)
         // register callbacks so we react to Shizuku availability changes
         runCatching { Shizuku.addBinderReceivedListener(binderListener) }
@@ -114,8 +122,17 @@ object ShizukuHelper : PrivilegeHelper {
             return
         }
         serviceStateFlowInternal.value = ShizukuServiceState.Binding
+        val args = userServiceArgs ?: appContext?.let {
+            buildUserServiceArgs(it).also { built ->
+                userServiceArgs = built
+            }
+        }
+        if (args == null) {
+            serviceStateFlowInternal.value = ShizukuServiceState.NotConnected
+            return
+        }
         val bound = runCatching {
-            Shizuku.bindUserService(userServiceArgs, serviceConnection)
+            Shizuku.bindUserService(args, serviceConnection)
             true
         }.onFailure {
             Log.w(TAG, "bindUserService failed", it)

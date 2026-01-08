@@ -63,6 +63,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.withContext
 import top.expli.bluetoothtester.data.SettingsStore
+import top.expli.bluetoothtester.model.AppUpdateUiState
+import top.expli.bluetoothtester.model.AppUpdateViewModel
 import top.expli.bluetoothtester.model.BluetoothToggleViewModel
 import top.expli.bluetoothtester.privilege.shizuku.ShizukuHelper
 import top.expli.bluetoothtester.privilege.shizuku.ShizukuServiceState
@@ -85,6 +87,8 @@ class MainActivity : ComponentActivity() {
         setContent {
             var themeOption by rememberSaveable { mutableStateOf(ThemeOption.System) }
             var dynamicColorEnabled by rememberSaveable { mutableStateOf(true) }
+            val updateVm: AppUpdateViewModel = viewModel()
+            val updateState by updateVm.uiState.collectAsState()
             val appCtx = applicationContext
             LaunchedEffect(Unit) {
                 SettingsStore.observe(appCtx).distinctUntilChanged().collect { s ->
@@ -114,7 +118,11 @@ class MainActivity : ComponentActivity() {
                     themeOption = themeOption,
                     onThemeChange = { themeOption = it },
                     dynamicColorEnabled = dynamicColorEnabled,
-                    onDynamicColorChange = { dynamicColorEnabled = it }
+                    onDynamicColorChange = { dynamicColorEnabled = it },
+                    updateState = updateState,
+                    onCheckForUpdates = { updateVm.checkForUpdates() },
+                    onUpdateGithubCdn = { updateVm.updateGithubCdn(it) },
+                    resolveUrl = { updateVm.resolveUrl(it) }
                 )
             }
         }
@@ -126,7 +134,11 @@ fun AppNavigation(
     themeOption: ThemeOption,
     onThemeChange: (ThemeOption) -> Unit,
     dynamicColorEnabled: Boolean,
-    onDynamicColorChange: (Boolean) -> Unit
+    onDynamicColorChange: (Boolean) -> Unit,
+    updateState: AppUpdateUiState,
+    onCheckForUpdates: () -> Unit,
+    onUpdateGithubCdn: (String) -> Unit,
+    resolveUrl: (String?) -> String?
 ) {
     val navController = rememberNavController()
     var renderFullUi by remember { mutableStateOf(false) }
@@ -181,7 +193,11 @@ fun AppNavigation(
                     themeOption = themeOption,
                     onThemeChange = onThemeChange,
                     dynamicColorEnabled = dynamicColorEnabled,
-                    onDynamicColorChange = onDynamicColorChange
+                    onDynamicColorChange = onDynamicColorChange,
+                    updateState = updateState,
+                    onCheckForUpdates = onCheckForUpdates,
+                    onUpdateGithubCdn = onUpdateGithubCdn,
+                    resolveUrl = resolveUrl
                 )
             }
 
