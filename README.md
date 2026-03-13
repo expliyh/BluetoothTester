@@ -15,6 +15,7 @@
 ## 🛠️ 环境初始化与维护（Linux/macOS）
 
 > 推荐 Java 25，并确保 `java -version` 输出为 25.x。
+> `init-android-env.sh` 会根据系统自动选择 Linux/macOS 对应的 Android Command-line Tools 安装包。
 
 ```bash
 # 1) 初始化 Android SDK + 写入 local.properties

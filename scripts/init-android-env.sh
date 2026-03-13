@@ -5,6 +5,21 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-$HOME/Android/Sdk}"
 CMDLINE_TOOLS_VERSION="${CMDLINE_TOOLS_VERSION:-13114758}"
 
+HOST_OS="$(uname -s)"
+case "$HOST_OS" in
+  Linux)
+    CMDLINE_TOOLS_OS="linux"
+    ;;
+  Darwin)
+    CMDLINE_TOOLS_OS="mac"
+    ;;
+  *)
+    echo "[ERROR] Unsupported host OS: $HOST_OS"
+    echo "[HINT] This script currently supports Linux and macOS (Darwin)."
+    exit 1
+    ;;
+esac
+
 if ! command -v java >/dev/null 2>&1; then
   echo "[ERROR] Java is required but not found in PATH."
   exit 1
@@ -21,10 +36,10 @@ LATEST_DIR="$TOOLS_DIR/latest"
 mkdir -p "$TOOLS_DIR"
 
 if [[ ! -x "$LATEST_DIR/bin/sdkmanager" ]]; then
-  echo "[INFO] Android command line tools not found, downloading..."
+  echo "[INFO] Android command line tools not found, downloading for $HOST_OS..."
   TMP_DIR="$(mktemp -d)"
   ARCHIVE="$TMP_DIR/cmdline-tools.zip"
-  URL="https://dl.google.com/android/repository/commandlinetools-linux-${CMDLINE_TOOLS_VERSION}_latest.zip"
+  URL="https://dl.google.com/android/repository/commandlinetools-${CMDLINE_TOOLS_OS}-${CMDLINE_TOOLS_VERSION}_latest.zip"
 
   curl -fL "$URL" -o "$ARCHIVE"
   unzip -q "$ARCHIVE" -d "$TMP_DIR/unpacked"
