@@ -21,7 +21,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      JAVA_VERSION: "21"
+      JAVA_VERSION: "25"
       ANDROID_SDK_VERSION: "36"
       GRADLE_OPTS: "-Dorg.gradle.daemon=false"
     steps:
