@@ -25,16 +25,32 @@ object SettingsStore {
         val githubCdn: String = ""
     )
 
+    internal object Mapper {
+        fun toSettings(themeOrdinal: Int?, dynamicEnabled: Boolean?, githubCdn: String?): Settings {
+            return Settings(
+                theme = resolveTheme(themeOrdinal),
+                dynamicColorEnabled = dynamicEnabled ?: true,
+                githubCdn = githubCdn.orEmpty()
+            )
+        }
+
+        fun resolveTheme(themeOrdinal: Int?): ThemeOption {
+            val safeOrdinal = themeOrdinal ?: ThemeOption.System.ordinal
+            return ThemeOption.entries.toTypedArray().getOrElse(safeOrdinal) { ThemeOption.System }
+        }
+
+        fun normalizeGithubCdn(cdn: String): String? {
+            val normalized = cdn.trim()
+            return normalized.ifBlank { null }
+        }
+    }
+
     fun observe(context: Context): Flow<Settings> =
         context.settingsDataStore.data.map { prefs ->
-            val themeOrdinal = prefs[KEY_THEME] ?: ThemeOption.System.ordinal
-            val dynamic = prefs[KEY_DYNAMIC] ?: true
-            val githubCdn = prefs[KEY_GITHUB_CDN].orEmpty()
-            Settings(
-                theme = ThemeOption.entries.toTypedArray()
-                    .getOrElse(themeOrdinal) { ThemeOption.System },
-                dynamicColorEnabled = dynamic,
-                githubCdn = githubCdn
+            Mapper.toSettings(
+                themeOrdinal = prefs[KEY_THEME],
+                dynamicEnabled = prefs[KEY_DYNAMIC],
+                githubCdn = prefs[KEY_GITHUB_CDN]
             )
         }
 
@@ -52,8 +68,8 @@ object SettingsStore {
 
     suspend fun updateGithubCdn(context: Context, cdn: String) {
         context.settingsDataStore.edit { prefs ->
-            val normalized = cdn.trim()
-            if (normalized.isBlank()) {
+            val normalized = Mapper.normalizeGithubCdn(cdn)
+            if (normalized == null) {
                 prefs.remove(KEY_GITHUB_CDN)
             } else {
                 prefs[KEY_GITHUB_CDN] = normalized
