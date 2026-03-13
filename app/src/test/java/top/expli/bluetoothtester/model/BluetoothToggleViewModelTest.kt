@@ -8,10 +8,13 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Rule
 import org.junit.Test
+import org.junit.runner.RunWith
 import org.robolectric.RuntimeEnvironment
+import org.robolectric.RobolectricTestRunner
 import top.expli.bluetoothtester.privilege.shizuku.BluetoothState
 
 @OptIn(ExperimentalCoroutinesApi::class)
+@RunWith(RobolectricTestRunner::class)
 class BluetoothToggleViewModelTest {
     @get:Rule
     val mainDispatcherRule = MainDispatcherRule()

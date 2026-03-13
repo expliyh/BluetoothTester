@@ -6,9 +6,12 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Rule
 import org.junit.Test
+import org.junit.runner.RunWith
 import org.robolectric.RuntimeEnvironment
+import org.robolectric.RobolectricTestRunner
 
 @OptIn(ExperimentalCoroutinesApi::class)
+@RunWith(RobolectricTestRunner::class)
 class SppViewModelTest {
     @get:Rule
     val mainDispatcherRule = MainDispatcherRule()
