@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import top.expli.bluetoothtester.ui.ThemeOption
 
@@ -18,6 +19,7 @@ object SettingsStore {
     private val KEY_THEME = intPreferencesKey("theme_option") // 0=System,1=Light,2=Dark
     private val KEY_DYNAMIC = booleanPreferencesKey("dynamic_color_enabled")
     private val KEY_GITHUB_CDN = stringPreferencesKey("github_cdn")
+    val KEY_ACTIVE_CONNECTIONS = booleanPreferencesKey("active_connections")
 
     data class Settings(
         val theme: ThemeOption = ThemeOption.System,
@@ -75,5 +77,16 @@ object SettingsStore {
                 prefs[KEY_GITHUB_CDN] = normalized
             }
         }
+    }
+
+    suspend fun setActiveConnections(context: Context, active: Boolean) {
+        context.settingsDataStore.edit { prefs ->
+            prefs[KEY_ACTIVE_CONNECTIONS] = active
+        }
+    }
+
+    suspend fun wasActiveConnections(context: Context): Boolean {
+        val prefs = context.settingsDataStore.data.first()
+        return prefs[KEY_ACTIVE_CONNECTIONS] ?: false
     }
 }
