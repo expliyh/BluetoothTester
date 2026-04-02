@@ -34,7 +34,7 @@ import androidx.compose.material.icons.filled.ToggleOn
 import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.Cable
 import androidx.compose.material.icons.filled.Bluetooth
-import androidx.compose.material.icons.filled.BluetoothSearching
+import androidx.compose.material.icons.automirrored.filled.BluetoothSearching
 import androidx.compose.material.icons.filled.CellTower
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material.icons.filled.Link
@@ -449,7 +449,7 @@ private fun MainScreen(
                 id = "gatt_server",
                 title = "GATT 服务端",
                 description = "创建本地 GATT 服务",
-                icon = Icons.Default.BluetoothSearching
+                icon = Icons.AutoMirrored.Filled.BluetoothSearching
             ),
             MenuItem(
                 id = "l2cap",

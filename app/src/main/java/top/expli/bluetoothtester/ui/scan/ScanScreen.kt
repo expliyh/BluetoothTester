@@ -19,7 +19,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.BluetoothSearching
+import androidx.compose.material.icons.automirrored.filled.BluetoothSearching
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Warning
@@ -406,7 +406,7 @@ private fun EmptyState() {
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(
-                imageVector = Icons.Default.BluetoothSearching,
+                imageVector = Icons.AutoMirrored.Filled.BluetoothSearching,
                 contentDescription = null,
                 modifier = Modifier.size(64.dp),
                 tint = MaterialTheme.colorScheme.outline
