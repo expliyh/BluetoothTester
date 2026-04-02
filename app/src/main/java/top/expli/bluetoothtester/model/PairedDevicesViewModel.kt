@@ -56,6 +56,7 @@ class PairedDevicesViewModel(app: Application) : AndroidViewModel(app) {
         override fun onReceive(context: Context, intent: Intent) {
             if (intent.action != BluetoothDevice.ACTION_BOND_STATE_CHANGED) return
 
+            @Suppress("DEPRECATION")
             val device: BluetoothDevice =
                 intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE) ?: return
             val bondState = intent.getIntExtra(
