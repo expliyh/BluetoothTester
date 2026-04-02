@@ -1,4 +1,4 @@
-name: canary-release
+ name: canary-release
 
 on:
   push:

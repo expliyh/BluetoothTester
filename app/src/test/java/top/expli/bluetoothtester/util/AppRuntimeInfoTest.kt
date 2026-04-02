@@ -6,14 +6,18 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34])
 class AppRuntimeInfoTest {
     @Test
     fun toVersion_normalPath_shouldReadNameAndCode() {
-        val info = PackageInfo().apply {
-            versionName = "1.2.3"
-            longVersionCode = 123L
-        }
+        val info = PackageInfo()
+        info.versionName = "1.2.3"
+        info.longVersionCode = 123L
 
         val result = AppRuntimeInfo.toVersion(info)
 
