@@ -35,7 +35,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
+import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -176,7 +176,7 @@ private fun RoleTabs(
     onRoleChange: (L2capRole) -> Unit
 ) {
     val selectedIndex = if (currentRole == L2capRole.Client) 0 else 1
-    TabRow(selectedTabIndex = selectedIndex) {
+    PrimaryTabRow(selectedTabIndex = selectedIndex) {
         Tab(
             selected = selectedIndex == 0,
             onClick = { if (enabled) onRoleChange(L2capRole.Client) },
