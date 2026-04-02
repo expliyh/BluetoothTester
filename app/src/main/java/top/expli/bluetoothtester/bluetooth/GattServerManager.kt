@@ -240,7 +240,8 @@ class GattServerManager(private val context: Context) {
                     BluetoothGattDescriptor.DISABLE_NOTIFICATION_VALUE
                 }
             } else {
-                descriptor.value ?: byteArrayOf()
+                @Suppress("DEPRECATION")
+                (descriptor.value ?: byteArrayOf())
             }
 
             gattServer?.sendResponse(
@@ -325,6 +326,7 @@ class GattServerManager(private val context: Context) {
             // Set initial value
             val initialValue = charConfig.initialValue.hexToByteArray()
             if (initialValue.isNotEmpty()) {
+                @Suppress("DEPRECATION")
                 characteristic.value = initialValue
             }
             // Store initial value in our tracking map
@@ -337,6 +339,7 @@ class GattServerManager(private val context: Context) {
                     descConfig.permissions
                 )
                 if (descConfig.initialValue.isNotEmpty()) {
+                    @Suppress("DEPRECATION")
                     descriptor.value = descConfig.initialValue.hexToByteArray()
                 }
                 characteristic.addDescriptor(descriptor)
