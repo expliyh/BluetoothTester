@@ -36,8 +36,10 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
                 _filter
             ) { values ->
                 val bleState = values[0] as BleScanner.ScanState
+                @Suppress("UNCHECKED_CAST")
                 val bleDevices = values[1] as List<BleDeviceResult>
                 val classicState = values[2] as ClassicScanner.ScanState
+                @Suppress("UNCHECKED_CAST")
                 val classicDevices = values[3] as List<ClassicDeviceResult>
                 val filter = values[4] as BleScanFilter
 
