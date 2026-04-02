@@ -1,9 +1,14 @@
 package top.expli.bluetoothtester
 
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
+import androidx.lifecycle.lifecycleScope
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
@@ -24,7 +29,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.ToggleOn
+import androidx.compose.material.icons.filled.Devices
+import androidx.compose.material.icons.filled.Cable
+import androidx.compose.material.icons.filled.Bluetooth
+import androidx.compose.material.icons.filled.BluetoothSearching
+import androidx.compose.material.icons.filled.CellTower
+import androidx.compose.material.icons.filled.Terminal
+import androidx.compose.material.icons.filled.Link
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -59,8 +72,10 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.toRoute
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import top.expli.bluetoothtester.data.SettingsStore
 import top.expli.bluetoothtester.model.AppUpdateUiState
@@ -80,10 +95,56 @@ import top.expli.bluetoothtester.ui.theme.AnimatedBluetoothTesterTheme
 import top.expli.bluetoothtester.ui.theme.BluetoothTesterTheme
 
 class MainActivity : ComponentActivity() {
+
+    // Flag to track if BLE scan was paused when app went to background
+    private var scanWasPaused = false
+
     @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        top.expli.bluetoothtester.adb.AppStateChecker.isInForeground = true
+
+        // Register ProcessLifecycleOwner observer for foreground/background transitions
+        ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
+            override fun onStop(owner: LifecycleOwner) {
+                // App entering background
+                // TODO: If active connections/advertising/speed test → start ForegroundService
+                //   e.g. BluetoothForegroundService.addReason(Reason.SppConnection) etc.
+
+                // TODO: If BLE scanning → stop scan, set scanWasPaused = true
+                //   e.g. scanViewModel.stopBleScan(); scanWasPaused = true
+            }
+
+            override fun onStart(owner: LifecycleOwner) {
+                // App returning to foreground
+                if (scanWasPaused) {
+                    scanWasPaused = false
+                    Toast.makeText(
+                        this@MainActivity,
+                        "BLE 扫描已暂停，请手动恢复",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+                // TODO: Check if ForegroundService is still needed, stop if not
+            }
+        })
+
+        // Crash detection: check if last session had active connections
+        lifecycleScope.launch(Dispatchers.IO) {
+            val wasActive = SettingsStore.wasActiveConnections(applicationContext)
+            if (wasActive) {
+                // Clear the flag first
+                SettingsStore.setActiveConnections(applicationContext, false)
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(
+                        this@MainActivity,
+                        "上次连接已断开",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
+        }
         setContent {
             var themeOption by rememberSaveable { mutableStateOf(ThemeOption.System) }
             var dynamicColorEnabled by rememberSaveable { mutableStateOf(true) }
@@ -127,9 +188,25 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
-}
 
-@Composable
+    override fun onStart() {
+        super.onStart()
+        top.expli.bluetoothtester.adb.AppStateChecker.isInForeground = true
+    }
+
+    override fun onStop() {
+        super.onStop()
+        top.expli.bluetoothtester.adb.AppStateChecker.isInForeground = false
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        // Clear active connections flag on normal exit
+        kotlinx.coroutines.MainScope().launch(Dispatchers.IO) {
+            SettingsStore.setActiveConnections(applicationContext, false)
+        }
+    }
+}@Composable
 fun AppNavigation(
     themeOption: ThemeOption,
     onThemeChange: (ThemeOption) -> Unit,
@@ -179,10 +256,13 @@ fun AppNavigation(
                     onNavigateToSettings = { navController.navigate(Route.Settings) },
                     onNavigateToScan = { navController.navigate(Route.Scan) },
                     onNavigateToPaired = { navController.navigate(Route.PairedDevices) },
-                    onNavigateToBleScanner = { navController.navigate(Route.BleScanner) },
-                    onNavigateToClassic = { navController.navigate(Route.ClassicBluetooth) },
                     onNavigateToSpp = { navController.navigate(Route.Spp) },
-                    onNavigateToBluetoothToggle = { navController.navigate(Route.BluetoothToggle) }
+                    onNavigateToBluetoothToggle = { navController.navigate(Route.BluetoothToggle) },
+                    onNavigateToGattClient = { navController.navigate(Route.GattClient()) },
+                    onNavigateToGattServer = { navController.navigate(Route.GattServer()) },
+                    onNavigateToL2cap = { navController.navigate(Route.L2cap()) },
+                    onNavigateToAdvertiser = { navController.navigate(Route.Advertiser) },
+                    onNavigateToAdbHelp = { navController.navigate(Route.AdbHelp) }
                 )
             }
 
@@ -202,24 +282,66 @@ fun AppNavigation(
             }
 
             composable<Route.Scan> {
-                PlaceholderScreen(
-                    title = "扫描设备",
-                    onBackClick = { navController.navigateUp() })
+                top.expli.bluetoothtester.ui.scan.ScanScreen(
+                    onBackClick = { navController.navigateUp() }
+                )
             }
             composable<Route.PairedDevices> {
-                PlaceholderScreen(
-                    title = "已配对设备",
-                    onBackClick = { navController.navigateUp() })
+                top.expli.bluetoothtester.ui.paired.PairedDevicesScreen(
+                    onBackClick = { navController.navigateUp() },
+                    onNavigateToSpp = { navController.navigate(Route.Spp) },
+                    onNavigateToGattClient = { address, name ->
+                        navController.navigate(Route.GattClient(address, name))
+                    },
+                    onNavigateToL2cap = { address, name ->
+                        navController.navigate(Route.L2cap(address, name))
+                    }
+                )
             }
-            composable<Route.BleScanner> {
-                PlaceholderScreen(
-                    title = "BLE 扫描器",
-                    onBackClick = { navController.navigateUp() })
+            composable<Route.GattClient> { backStackEntry ->
+                val route = backStackEntry.toRoute<Route.GattClient>()
+                top.expli.bluetoothtester.ui.gatt.GattClientScreen(
+                    onBackClick = { navController.navigateUp() },
+                    initialAddress = route.address,
+                    initialName = route.name
+                )
             }
-            composable<Route.ClassicBluetooth> {
-                PlaceholderScreen(
-                    title = "经典蓝牙",
-                    onBackClick = { navController.navigateUp() })
+            composable<Route.GattServer> {
+                top.expli.bluetoothtester.ui.gatt.GattServerScreen(
+                    onBackClick = { navController.navigateUp() }
+                )
+            }
+            composable<Route.L2cap> { backStackEntry ->
+                val route = backStackEntry.toRoute<Route.L2cap>()
+                top.expli.bluetoothtester.ui.l2cap.L2capScreen(
+                    onBackClick = { navController.navigateUp() },
+                    initialAddress = route.address,
+                    initialName = route.name
+                )
+            }
+            composable<Route.DeviceDetail> { backStackEntry ->
+                val route = backStackEntry.toRoute<Route.DeviceDetail>()
+                top.expli.bluetoothtester.ui.device.DeviceDetailScreen(
+                    address = route.address,
+                    onBackClick = { navController.navigateUp() },
+                    onNavigateToSpp = { navController.navigate(Route.Spp) },
+                    onNavigateToGattClient = { address, name ->
+                        navController.navigate(Route.GattClient(address, name))
+                    },
+                    onNavigateToL2cap = { address, name ->
+                        navController.navigate(Route.L2cap(address, name))
+                    }
+                )
+            }
+            composable<Route.Advertiser> {
+                top.expli.bluetoothtester.ui.advertiser.AdvertiserScreen(
+                    onBackClick = { navController.navigateUp() }
+                )
+            }
+            composable<Route.AdbHelp> {
+                top.expli.bluetoothtester.ui.adb.AdbHelpScreen(
+                    onBackClick = { navController.navigateUp() }
+                )
             }
 
             composable<Route.Spp> {
@@ -271,10 +393,13 @@ private fun MainScreen(
     onNavigateToSettings: () -> Unit = {},
     onNavigateToScan: () -> Unit = {},
     onNavigateToPaired: () -> Unit = {},
-    onNavigateToBleScanner: () -> Unit = {},
-    onNavigateToClassic: () -> Unit = {},
     onNavigateToSpp: () -> Unit = {},
-    onNavigateToBluetoothToggle: () -> Unit = {}
+    onNavigateToBluetoothToggle: () -> Unit = {},
+    onNavigateToGattClient: () -> Unit = {},
+    onNavigateToGattServer: () -> Unit = {},
+    onNavigateToL2cap: () -> Unit = {},
+    onNavigateToAdvertiser: () -> Unit = {},
+    onNavigateToAdbHelp: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val serviceState by ShizukuHelper.serviceStateFlow.collectAsState()
@@ -297,10 +422,52 @@ private fun MainScreen(
                 requirePrivilege = true
             ),
             MenuItem(
+                id = "scan",
+                title = "扫描设备",
+                description = "BLE 和经典蓝牙设备扫描",
+                icon = Icons.Default.Search
+            ),
+            MenuItem(
+                id = "paired",
+                title = "已配对设备",
+                description = "查看和管理已配对设备",
+                icon = Icons.Default.Devices
+            ),
+            MenuItem(
                 id = "spp",
                 title = "SPP 工具",
                 description = "多设备注册、连接、收发",
                 icon = Icons.AutoMirrored.Filled.KeyboardArrowRight
+            ),
+            MenuItem(
+                id = "gatt_client",
+                title = "GATT 客户端",
+                description = "BLE GATT 服务发现与交互",
+                icon = Icons.Default.Bluetooth
+            ),
+            MenuItem(
+                id = "gatt_server",
+                title = "GATT 服务端",
+                description = "创建本地 GATT 服务",
+                icon = Icons.Default.BluetoothSearching
+            ),
+            MenuItem(
+                id = "l2cap",
+                title = "L2CAP 工具",
+                description = "BLE L2CAP CoC 通道测试",
+                icon = Icons.Default.Cable
+            ),
+            MenuItem(
+                id = "advertiser",
+                title = "BLE 广播",
+                description = "配置和启动 BLE 广播",
+                icon = Icons.Default.CellTower
+            ),
+            MenuItem(
+                id = "adb_help",
+                title = "ADB 帮助",
+                description = "ADB 控制命令参考",
+                icon = Icons.Default.Terminal
             ),
             MenuItem(
                 id = "settings",
@@ -379,10 +546,13 @@ private fun MainScreen(
                         when (item.id) {
                             "scan" -> onNavigateToScan()
                             "paired" -> onNavigateToPaired()
-                            "ble_scanner" -> onNavigateToBleScanner()
-                            "classic_bluetooth" -> onNavigateToClassic()
                             "spp" -> onNavigateToSpp()
                             "bluetooth_toggle" -> onNavigateToBluetoothToggle()
+                            "gatt_client" -> onNavigateToGattClient()
+                            "gatt_server" -> onNavigateToGattServer()
+                            "l2cap" -> onNavigateToL2cap()
+                            "advertiser" -> onNavigateToAdvertiser()
+                            "adb_help" -> onNavigateToAdbHelp()
                             "settings" -> onNavigateToSettings()
                         }
                     }

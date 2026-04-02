@@ -321,6 +321,7 @@ class SppViewModel(app: Application) : AndroidViewModel(app) {
         }
 
         stopReceiveLoop(key)
+        // TODO: ForegroundService integration — call addReason(Reason.SpeedTest)
         updateSession(key) {
             it.copy(
                 lastError = null,
@@ -442,6 +443,7 @@ class SppViewModel(app: Application) : AndroidViewModel(app) {
         val runtime = runtimes[key] ?: return
         runtime.speedTestJob?.cancel()
         runtime.speedTestJob = null
+        // TODO: ForegroundService integration — call removeReason(Reason.SpeedTest)
         updateSession(key) { it.copy(speedTestRunning = false) }
     }
 
@@ -664,11 +666,13 @@ class SppViewModel(app: Application) : AndroidViewModel(app) {
 
         when (mapped) {
             SppConnectionState.Connected -> {
+                // TODO: ForegroundService integration — call addReason(Reason.SppConnection)
                 val session = _uiState.value.sessions[key]
                 if (session != null && !session.speedTestRunning) startReceiveLoop(key)
             }
 
             SppConnectionState.Closed, SppConnectionState.Error -> {
+                // TODO: ForegroundService integration — call removeReason(Reason.SppConnection)
                 stopSpeedTest(key)
                 stopReceiveLoop(key)
             }

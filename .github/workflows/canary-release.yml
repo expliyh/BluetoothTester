@@ -1,4 +1,4 @@
-name: cannary-release
+ name: canary-release
 
 on:
   push:
@@ -9,7 +9,11 @@ permissions:
   contents: write
 
 jobs:
+  test:
+    uses: ./.github/workflows/unit-test.yml
+
   canary:
+    needs: test
     runs-on: ubuntu-latest
     env:
       JAVA_VERSION: "25"

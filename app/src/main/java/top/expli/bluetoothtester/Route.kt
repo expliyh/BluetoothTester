@@ -17,12 +17,6 @@ sealed interface Route {
     data object PairedDevices : Route
 
     @Serializable
-    data object BleScanner : Route
-
-    @Serializable
-    data object ClassicBluetooth : Route
-
-    @Serializable
     data object AdvancedPermission : Route
 
     @Serializable
@@ -30,4 +24,22 @@ sealed interface Route {
 
     @Serializable
     data object Spp : Route
+
+    @Serializable
+    data class GattClient(val address: String = "", val name: String = "") : Route
+
+    @Serializable
+    data class GattServer(val dummy: Int = 0) : Route
+
+    @Serializable
+    data class L2cap(val address: String = "", val name: String = "") : Route
+
+    @Serializable
+    data class DeviceDetail(val address: String) : Route
+
+    @Serializable
+    data object Advertiser : Route
+
+    @Serializable
+    data object AdbHelp : Route
 }

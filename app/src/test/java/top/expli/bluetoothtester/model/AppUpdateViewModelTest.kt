@@ -20,7 +20,7 @@ class AppUpdateViewModelTest {
 
     @Test
     fun uiState_normalPath_shouldHaveInitialVersionAndChannel() = runTest {
-        val app = RuntimeEnvironment.getApplication<android.app.Application>()
+        val app = RuntimeEnvironment.getApplication()
         SettingsStore.updateGithubCdn(app, "")
 
         val viewModel = AppUpdateViewModel(app)
@@ -33,7 +33,7 @@ class AppUpdateViewModelTest {
 
     @Test
     fun updateGithubCdn_boundaryPath_blankShouldKeepOriginalUrl() = runTest {
-        val app = RuntimeEnvironment.getApplication<android.app.Application>()
+        val app = RuntimeEnvironment.getApplication()
         val viewModel = AppUpdateViewModel(app)
 
         viewModel.updateGithubCdn("   ")
@@ -45,7 +45,7 @@ class AppUpdateViewModelTest {
 
     @Test
     fun resolveUrl_exceptionPath_nullInputShouldReturnNull() = runTest {
-        val app = RuntimeEnvironment.getApplication<android.app.Application>()
+        val app = RuntimeEnvironment.getApplication()
         val viewModel = AppUpdateViewModel(app)
 
         val resolved = viewModel.resolveUrl(null)

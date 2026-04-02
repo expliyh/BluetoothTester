@@ -18,7 +18,11 @@ on:
         default: "true"
 
 jobs:
+  test:
+    uses: ./.github/workflows/unit-test.yml
+
   build:
+    needs: test
     runs-on: ubuntu-latest
     env:
       JAVA_VERSION: "25"
