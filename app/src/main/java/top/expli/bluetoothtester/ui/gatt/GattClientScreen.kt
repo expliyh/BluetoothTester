@@ -22,6 +22,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.BluetoothSearching
 import androidx.compose.material.icons.filled.Contacts
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
@@ -344,8 +345,10 @@ fun GattClientScreen(
             showScanned = true,
             deviceTypeFilter = setOf(DeviceType.BLE, DeviceType.Dual),
             onStartScan = {
-                @SuppressWarnings("MissingPermission")
-                scanViewModel.startBleScan()
+                ensureBluetoothPermissions {
+                    @SuppressWarnings("MissingPermission")
+                    scanViewModel.startBleScan()
+                }
             },
             onDismissRequest = {
                 scanViewModel.stopBleScan()
@@ -399,7 +402,7 @@ private fun ConnectionSection(
                         onClick = onPickDevice,
                         enabled = !isConnected && !isConnecting
                     ) {
-                        Icon(Icons.Default.Contacts, contentDescription = "选择设备")
+                        Icon(Icons.AutoMirrored.Filled.BluetoothSearching, contentDescription = "选择设备")
                     }
                 }
             )
