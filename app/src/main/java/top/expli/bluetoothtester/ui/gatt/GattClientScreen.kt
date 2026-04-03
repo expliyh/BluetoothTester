@@ -1,6 +1,10 @@
 package top.expli.bluetoothtester.ui.gatt
 
+import android.annotation.SuppressLint
+import android.app.Activity
 import android.bluetooth.BluetoothGattCharacteristic
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -18,8 +22,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.BluetoothSearching
+import androidx.compose.material.icons.filled.Contacts
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -32,9 +39,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -43,21 +53,34 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.launch
+import top.expli.bluetoothtester.model.DeviceType
 import top.expli.bluetoothtester.model.GattCharacteristicInfo
 import top.expli.bluetoothtester.model.GattConnectionState
 import top.expli.bluetoothtester.model.GattClientViewModel
 import top.expli.bluetoothtester.model.GattLogEntry
 import top.expli.bluetoothtester.model.GattServiceInfo
+import top.expli.bluetoothtester.model.ScanViewModel
+import top.expli.bluetoothtester.ui.common.BondedDeviceItem
+import top.expli.bluetoothtester.ui.common.BondedDeviceLoadResult
+import top.expli.bluetoothtester.ui.common.DevicePickerSheet
+import top.expli.bluetoothtester.ui.common.loadBondedDeviceItems
+import top.expli.bluetoothtester.ui.permissions.BluetoothPermissions
+import top.expli.bluetoothtester.ui.permissions.openAppSettings
+import java.util.concurrent.atomic.AtomicReference
 
+@SuppressLint("MissingPermission")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GattClientScreen(
@@ -67,8 +90,53 @@ fun GattClientScreen(
     viewModel: GattClientViewModel = viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val scanViewModel: ScanViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    val scanUiState by scanViewModel.uiState.collectAsState()
     var targetAddress by rememberSaveable { mutableStateOf(initialAddress) }
     var mtuInput by rememberSaveable { mutableStateOf("512") }
+
+    val context = LocalContext.current
+    val activity = context as? Activity
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+
+    // ─── Device picker state ───
+    var showDevicePicker by remember { mutableStateOf(false) }
+    var bondedDevices by remember { mutableStateOf<List<BondedDeviceItem>>(emptyList()) }
+
+    // ─── Permission state ───
+    var showPermissionRationaleDialog by remember { mutableStateOf(false) }
+    var showPermissionSettingsDialog by remember { mutableStateOf(false) }
+    val pendingBluetoothAction = remember { AtomicReference<(() -> Unit)?>(null) }
+
+    val bluetoothPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { result ->
+        val granted = result.values.all { it }
+        val pendingAction = pendingBluetoothAction.getAndSet(null)
+        if (granted) {
+            pendingAction?.invoke()
+        } else {
+            if (activity != null && !BluetoothPermissions.shouldShowRationale(activity)) {
+                showPermissionSettingsDialog = true
+            } else {
+                scope.launch { snackbarHostState.showSnackbar("需要蓝牙权限才能继续") }
+            }
+        }
+    }
+
+    fun ensureBluetoothPermissions(action: () -> Unit) {
+        if (BluetoothPermissions.hasAll(context)) {
+            action()
+            return
+        }
+        pendingBluetoothAction.set(action)
+        if (activity != null && BluetoothPermissions.shouldShowRationale(activity)) {
+            showPermissionRationaleDialog = true
+        } else {
+            bluetoothPermissionLauncher.launch(BluetoothPermissions.required)
+        }
+    }
 
     LaunchedEffect(initialAddress) {
         if (initialAddress.isNotBlank()) {
@@ -84,6 +152,7 @@ fun GattClientScreen(
     Surface(color = surfaceColor) {
         Scaffold(
             containerColor = Color.Transparent,
+            snackbarHost = { SnackbarHost(snackbarHostState) },
             topBar = {
                 TopAppBar(
                     title = {
@@ -130,6 +199,30 @@ fun GattClientScreen(
                         onDisconnect = {
                             @SuppressWarnings("MissingPermission")
                             viewModel.disconnect()
+                        },
+                        onPickDevice = {
+                            ensureBluetoothPermissions {
+                                val result = runCatching { loadBondedDeviceItems(context) }.getOrElse {
+                                    scope.launch {
+                                        snackbarHostState.showSnackbar(
+                                            "读取已绑定设备失败: ${it.message ?: it::class.java.simpleName}"
+                                        )
+                                    }
+                                    return@ensureBluetoothPermissions
+                                }
+                                when (result) {
+                                    is BondedDeviceLoadResult.Success -> {
+                                        bondedDevices = result.devices
+                                        showDevicePicker = true
+                                    }
+                                    BondedDeviceLoadResult.BluetoothDisabled -> scope.launch {
+                                        snackbarHostState.showSnackbar("蓝牙未开启，请先开启蓝牙")
+                                    }
+                                    BondedDeviceLoadResult.BluetoothUnavailable -> scope.launch {
+                                        snackbarHostState.showSnackbar("本机蓝牙不可用")
+                                    }
+                                }
+                            }
                         }
                     )
                 }
@@ -198,6 +291,77 @@ fun GattClientScreen(
             }
         }
     }
+
+    // ─── Permission Rationale Dialog ───
+    if (showPermissionRationaleDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showPermissionRationaleDialog = false
+                pendingBluetoothAction.set(null)
+            },
+            title = { Text("需要蓝牙权限") },
+            text = { Text("GATT 连接需要授予「附近设备」相关的蓝牙连接与扫描权限。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showPermissionRationaleDialog = false
+                    bluetoothPermissionLauncher.launch(BluetoothPermissions.required)
+                }) { Text("去授权") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showPermissionRationaleDialog = false
+                    pendingBluetoothAction.set(null)
+                }) { Text("取消") }
+            }
+        )
+    }
+
+    // ─── Permission Settings Dialog ───
+    if (showPermissionSettingsDialog) {
+        AlertDialog(
+            onDismissRequest = { showPermissionSettingsDialog = false },
+            title = { Text("权限被拒绝") },
+            text = { Text("蓝牙权限可能已被永久拒绝，请前往系统设置手动开启。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showPermissionSettingsDialog = false
+                    openAppSettings(context)
+                }) { Text("打开设置") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPermissionSettingsDialog = false }) {
+                    Text("取消")
+                }
+            }
+        )
+    }
+
+    // ─── Device Picker Sheet ───
+    if (showDevicePicker) {
+        DevicePickerSheet(
+            bondedDevices = bondedDevices,
+            scannedDevices = scanUiState.combinedDevices,
+            showBonded = true,
+            showScanned = true,
+            deviceTypeFilter = setOf(DeviceType.BLE, DeviceType.Dual),
+            onStartScan = {
+                ensureBluetoothPermissions {
+                    @SuppressWarnings("MissingPermission")
+                    scanViewModel.startBleScan()
+                }
+            },
+            onDismissRequest = {
+                scanViewModel.stopBleScan()
+                showDevicePicker = false
+            },
+            onSelect = { address, name ->
+                scanViewModel.stopBleScan()
+                targetAddress = address
+                viewModel.setTarget(address, name ?: "")
+                showDevicePicker = false
+            }
+        )
+    }
 }
 
 // ─── Connection Section ───
@@ -210,7 +374,8 @@ private fun ConnectionSection(
     isConnected: Boolean,
     isConnecting: Boolean,
     onConnect: () -> Unit,
-    onDisconnect: () -> Unit
+    onDisconnect: () -> Unit,
+    onPickDevice: () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -231,7 +396,15 @@ private fun ConnectionSection(
                 placeholder = { Text("AA:BB:CC:DD:EE:FF") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
-                enabled = !isConnected && !isConnecting
+                enabled = !isConnected && !isConnecting,
+                trailingIcon = {
+                    IconButton(
+                        onClick = onPickDevice,
+                        enabled = !isConnected && !isConnecting
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.BluetoothSearching, contentDescription = "选择设备")
+                    }
+                }
             )
 
             Row(
