@@ -12,7 +12,8 @@ import androidx.core.content.ContextCompat
 object BluetoothPermissions {
     val required: Array<String> = arrayOf(
         Manifest.permission.BLUETOOTH_CONNECT,
-        Manifest.permission.BLUETOOTH_SCAN
+        Manifest.permission.BLUETOOTH_SCAN,
+        Manifest.permission.ACCESS_FINE_LOCATION
     )
 
     fun hasAll(context: Context): Boolean =
