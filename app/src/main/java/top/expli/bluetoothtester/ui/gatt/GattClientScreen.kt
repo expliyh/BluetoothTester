@@ -89,7 +89,7 @@ fun GattClientScreen(
     viewModel: GattClientViewModel = viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val scanViewModel: ScanViewModel = viewModel()
+    val scanViewModel: ScanViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
     val scanUiState by scanViewModel.uiState.collectAsState()
     var targetAddress by rememberSaveable { mutableStateOf(initialAddress) }
     var mtuInput by rememberSaveable { mutableStateOf("512") }
@@ -347,8 +347,12 @@ fun GattClientScreen(
                 @SuppressWarnings("MissingPermission")
                 scanViewModel.startBleScan()
             },
-            onDismissRequest = { showDevicePicker = false },
+            onDismissRequest = {
+                scanViewModel.stopBleScan()
+                showDevicePicker = false
+            },
             onSelect = { address, name ->
+                scanViewModel.stopBleScan()
                 targetAddress = address
                 viewModel.setTarget(address, name ?: "")
                 showDevicePicker = false
