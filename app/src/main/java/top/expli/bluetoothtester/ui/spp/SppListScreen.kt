@@ -234,7 +234,7 @@ private fun RoleChip(role: SppRole, selected: Boolean) {
 fun AddSppDeviceDialog(
     onDismiss: () -> Unit,
     onConfirm: (SppDevice) -> Unit,
-    onPickBondedDevice: ((onPicked: (BondedDeviceItem) -> Unit) -> Unit) = {}
+    onPickBondedDevice: ((onPicked: (String, String?) -> Unit) -> Unit) = {}
 ) {
     var name by remember { mutableStateOf("") }
     var addr by remember { mutableStateOf("") }
@@ -279,10 +279,10 @@ fun AddSppDeviceDialog(
                         label = { Text("地址（必填）") },
                         trailingIcon = {
                             IconButton(onClick = {
-                                onPickBondedDevice { picked ->
-                                    addr = picked.address
-                                    if (name.isBlank() && picked.name.isNotBlank()) {
-                                        name = picked.name
+                                onPickBondedDevice { pickedAddr, pickedName ->
+                                    addr = pickedAddr
+                                    if (name.isBlank() && pickedName != null && pickedName.isNotBlank()) {
+                                        name = pickedName
                                     }
                                 }
                             }) {

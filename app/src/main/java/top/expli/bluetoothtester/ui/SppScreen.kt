@@ -2,8 +2,6 @@ package top.expli.bluetoothtester.ui
 
 import android.annotation.SuppressLint
 import android.app.Activity
-import android.bluetooth.BluetoothManager
-import android.content.Context
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -53,9 +51,11 @@ import top.expli.bluetoothtester.model.SppViewModel
 import top.expli.bluetoothtester.ui.navigation.AppNavTransitions
 import top.expli.bluetoothtester.ui.permissions.BluetoothPermissions
 import top.expli.bluetoothtester.ui.permissions.openAppSettings
+import top.expli.bluetoothtester.ui.common.BondedDeviceItem
+import top.expli.bluetoothtester.ui.common.BondedDeviceLoadResult
+import top.expli.bluetoothtester.ui.common.DevicePickerSheet
+import top.expli.bluetoothtester.ui.common.loadBondedDeviceItems
 import top.expli.bluetoothtester.ui.spp.AddSppDeviceDialog
-import top.expli.bluetoothtester.ui.spp.BondedDeviceItem
-import top.expli.bluetoothtester.ui.spp.BondedDevicePickerSheet
 import top.expli.bluetoothtester.ui.spp.SppDetailScreen
 import top.expli.bluetoothtester.ui.spp.SppListScreen
 import top.expli.bluetoothtester.ui.spp.SppRoute
@@ -83,7 +83,7 @@ fun SppScreen(onBackClick: () -> Unit) {
     var bondedDevices by remember { mutableStateOf<List<BondedDeviceItem>>(emptyList()) }
     val pendingBluetoothAction = remember { AtomicReference<(() -> Unit)?>(null) }
     val bondedDevicePickerOnSelect =
-        remember { AtomicReference<((BondedDeviceItem) -> Unit)?>(null) }
+        remember { AtomicReference<((String, String?) -> Unit)?>(null) }
 
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
@@ -118,7 +118,7 @@ fun SppScreen(onBackClick: () -> Unit) {
         }
     }
 
-    fun requestBondedDevicePick(onPicked: (BondedDeviceItem) -> Unit) {
+    fun requestBondedDevicePick(onPicked: (String, String?) -> Unit) {
         ensureBluetoothPermissions {
             val result = runCatching { loadBondedDeviceItems(context) }.getOrElse {
                 scope.launch {
@@ -292,15 +292,15 @@ fun SppScreen(onBackClick: () -> Unit) {
                     },
                     onClearChat = { vm.clearChat() },
                     onConnectFromBondedDevice = {
-                        requestBondedDevicePick { picked ->
+                        requestBondedDevicePick { addr, name ->
                             val selected =
                                 latestState.selectedKey?.let { latestState.sessions[it] }?.device
                                     ?: return@requestBondedDevicePick
-                            val pickedName = picked.name.ifBlank { picked.address }
+                            val pickedName = name ?: addr
                             val resolvedName =
                                 if (selected.name.isBlank() || selected.name == selected.address) pickedName else selected.name
                             val updated =
-                                selected.copy(name = resolvedName, address = picked.address)
+                                selected.copy(name = resolvedName, address = addr)
                             ensureBluetoothPermissions {
                                 vm.select(updated)
                                 vm.connect()
@@ -374,49 +374,20 @@ fun SppScreen(onBackClick: () -> Unit) {
     }
 
     if (showBondedDevicePicker) {
-        BondedDevicePickerSheet(
-            devices = bondedDevices,
+        DevicePickerSheet(
+            bondedDevices = bondedDevices,
+            showBonded = true,
+            showScanned = false,
             onDismissRequest = {
                 @Suppress("ASSIGNED_VALUE_IS_NEVER_READ")
                 showBondedDevicePicker = false
                 bondedDevicePickerOnSelect.set(null)
             },
-            onSelect = { picked ->
+            onSelect = { addr, name ->
                 @Suppress("ASSIGNED_VALUE_IS_NEVER_READ")
                 showBondedDevicePicker = false
-                bondedDevicePickerOnSelect.getAndSet(null)?.invoke(picked)
+                bondedDevicePickerOnSelect.getAndSet(null)?.invoke(addr, name)
             }
         )
     }
-}
-
-private sealed interface BondedDeviceLoadResult {
-    data class Success(val devices: List<BondedDeviceItem>) : BondedDeviceLoadResult
-    data object BluetoothDisabled : BondedDeviceLoadResult
-    data object BluetoothUnavailable : BondedDeviceLoadResult
-}
-
-@SuppressLint("MissingPermission")
-private fun loadBondedDeviceItems(context: Context): BondedDeviceLoadResult {
-    val adapter = context.getSystemService(BluetoothManager::class.java)?.adapter
-        ?: return BondedDeviceLoadResult.BluetoothUnavailable
-    if (!adapter.isEnabled) return BondedDeviceLoadResult.BluetoothDisabled
-    val devices = adapter.bondedDevices ?: emptySet()
-    return devices
-        .asSequence()
-        .map { dev ->
-            val name = runCatching { dev.name }.getOrNull().orEmpty()
-            BondedDeviceItem(
-                name = name,
-                address = dev.address
-            )
-        }
-        .filter { it.address.isNotBlank() }
-        .distinctBy { it.address }
-        .sortedWith(
-            compareBy<BondedDeviceItem> { it.name.ifBlank { it.address }.lowercase() }
-                .thenBy { it.address }
-        )
-        .toList()
-        .let { BondedDeviceLoadResult.Success(it) }
 }
