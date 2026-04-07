@@ -20,7 +20,7 @@ foundation = "1.10.6"
 coroutinesTest = "1.10.2"
 mockk = "1.14.9"
 robolectric = "4.16.1"
-kotestProperty = "5.9.1"
+kotestProperty = "6.1.11"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
