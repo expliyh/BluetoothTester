@@ -22,7 +22,7 @@ import top.expli.bluetoothtester.bluetooth.L2capServerManager
 import top.expli.bluetoothtester.bluetooth.SendRecvBluetoothProfileManager
 import top.expli.bluetoothtester.bluetooth.SocketLikeBluetoothClientManager
 import top.expli.bluetoothtester.bluetooth.SocketLikeBluetoothServerManager
-import java.util.Locale
+import top.expli.bluetoothtester.util.formatBps
 import java.util.concurrent.atomic.AtomicLong
 
 /**
@@ -371,17 +371,6 @@ class L2capViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     // ─── 工具方法 ───
-
-    private fun formatBps(bps: Double): String {
-        val units = arrayOf("B/s", "KB/s", "MB/s", "GB/s")
-        var value = bps
-        var unitIndex = 0
-        while (value >= 1024 && unitIndex < units.lastIndex) {
-            value /= 1024
-            unitIndex++
-        }
-        return String.format(Locale.US, "%.2f %s", value, units[unitIndex])
-    }
 
     private fun formatIncoming(bytes: ByteArray): String {
         val text = runCatching { bytes.toString(Charsets.UTF_8) }.getOrNull()

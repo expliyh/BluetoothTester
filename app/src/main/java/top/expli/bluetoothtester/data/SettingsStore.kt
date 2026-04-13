@@ -9,6 +9,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import top.expli.bluetoothtester.model.SecurityMode
 import top.expli.bluetoothtester.ui.ThemeOption
 
 private const val STORE_NAME = "app_settings"
@@ -20,6 +21,8 @@ object SettingsStore {
     private val KEY_DYNAMIC = booleanPreferencesKey("dynamic_color_enabled")
     private val KEY_GITHUB_CDN = stringPreferencesKey("github_cdn")
     val KEY_ACTIVE_CONNECTIONS = booleanPreferencesKey("active_connections")
+    private val KEY_LOCAL_SOCKET_DEBUG = booleanPreferencesKey("local_socket_debug_mode")
+    private val KEY_CLIENT_DEFAULT_SECURITY_MODE = stringPreferencesKey("client_default_security_mode")
 
     data class Settings(
         val theme: ThemeOption = ThemeOption.System,
@@ -88,5 +91,28 @@ object SettingsStore {
     suspend fun wasActiveConnections(context: Context): Boolean {
         val prefs = context.settingsDataStore.data.first()
         return prefs[KEY_ACTIVE_CONNECTIONS] ?: false
+    }
+
+    fun observeLocalSocketDebug(context: Context): Flow<Boolean> =
+        context.settingsDataStore.data.map { prefs ->
+            prefs[KEY_LOCAL_SOCKET_DEBUG] ?: false
+        }
+
+    suspend fun updateLocalSocketDebug(context: Context, enabled: Boolean) {
+        context.settingsDataStore.edit { prefs ->
+            prefs[KEY_LOCAL_SOCKET_DEBUG] = enabled
+        }
+    }
+
+    fun observeClientDefaultSecurityMode(context: Context): Flow<SecurityMode> =
+        context.settingsDataStore.data.map { prefs ->
+            val raw = prefs[KEY_CLIENT_DEFAULT_SECURITY_MODE] ?: "Secure"
+            try { SecurityMode.valueOf(raw) } catch (_: Exception) { SecurityMode.Secure }
+        }
+
+    suspend fun updateClientDefaultSecurityMode(context: Context, mode: SecurityMode) {
+        context.settingsDataStore.edit { prefs ->
+            prefs[KEY_CLIENT_DEFAULT_SECURITY_MODE] = mode.name
+        }
     }
 }

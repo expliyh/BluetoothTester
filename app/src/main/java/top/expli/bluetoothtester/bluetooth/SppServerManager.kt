@@ -10,7 +10,8 @@ import java.util.UUID
 
 class SppServerManager(
     context: Context,
-    private val serviceUuid: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
+    private val serviceUuid: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB"),
+    private val secure: Boolean = true
 ) : SocketLikeBluetoothServerManager(context) {
     override val serviceName: String = "BluetoothTesterSPP"
 
@@ -18,7 +19,11 @@ class SppServerManager(
     override fun registerSocket(): BluetoothServerSocket? {
         return try {
             if (adapter == null) throw AdapterNotInitialized()
-            adapter!!.listenUsingRfcommWithServiceRecord(serviceName, serviceUuid)
+            if (secure) {
+                adapter!!.listenUsingRfcommWithServiceRecord(serviceName, serviceUuid)
+            } else {
+                adapter!!.listenUsingInsecureRfcommWithServiceRecord(serviceName, serviceUuid)
+            }
         } catch (_: IOException) {
             null
         } catch (_: Exception) {

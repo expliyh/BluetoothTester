@@ -90,6 +90,7 @@ import top.expli.bluetoothtester.ui.PlaceholderScreen
 import top.expli.bluetoothtester.ui.SettingsScreen
 import top.expli.bluetoothtester.ui.SppScreen
 import top.expli.bluetoothtester.ui.ThemeOption
+import top.expli.bluetoothtester.ui.permissions.BluetoothPermissionRequester
 import top.expli.bluetoothtester.ui.navigation.AppNavTransitions
 import top.expli.bluetoothtester.ui.theme.AnimatedBluetoothTesterTheme
 import top.expli.bluetoothtester.ui.theme.BluetoothTesterTheme
@@ -148,6 +149,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             var themeOption by rememberSaveable { mutableStateOf(ThemeOption.System) }
             var dynamicColorEnabled by rememberSaveable { mutableStateOf(true) }
+            var localSocketDebugEnabled by rememberSaveable { mutableStateOf(false) }
             val updateVm: AppUpdateViewModel = viewModel()
             val updateState by updateVm.uiState.collectAsState()
             val appCtx = applicationContext
@@ -155,6 +157,11 @@ class MainActivity : ComponentActivity() {
                 SettingsStore.observe(appCtx).distinctUntilChanged().collect { s ->
                     themeOption = s.theme
                     dynamicColorEnabled = s.dynamicColorEnabled
+                }
+            }
+            LaunchedEffect(Unit) {
+                SettingsStore.observeLocalSocketDebug(appCtx).distinctUntilChanged().collect { enabled ->
+                    localSocketDebugEnabled = enabled
                 }
             }
             val darkTheme = when (themeOption) {
@@ -175,6 +182,7 @@ class MainActivity : ComponentActivity() {
                 LaunchedEffect(Unit) {
                     withContext(Dispatchers.IO) { ShizukuHelper.init(applicationContext) }
                 }
+                BluetoothPermissionRequester()
                 AppNavigation(
                     themeOption = themeOption,
                     onThemeChange = { themeOption = it },
@@ -183,7 +191,14 @@ class MainActivity : ComponentActivity() {
                     updateState = updateState,
                     onCheckForUpdates = { updateVm.checkForUpdates() },
                     onUpdateGithubCdn = { updateVm.updateGithubCdn(it) },
-                    resolveUrl = { updateVm.resolveUrl(it) }
+                    resolveUrl = { updateVm.resolveUrl(it) },
+                    localSocketDebugEnabled = localSocketDebugEnabled,
+                    onLocalSocketDebugChange = { enabled ->
+                        localSocketDebugEnabled = enabled
+                        kotlinx.coroutines.MainScope().launch {
+                            SettingsStore.updateLocalSocketDebug(appCtx, enabled)
+                        }
+                    }
                 )
             }
         }
@@ -215,7 +230,9 @@ fun AppNavigation(
     updateState: AppUpdateUiState,
     onCheckForUpdates: () -> Unit,
     onUpdateGithubCdn: (String) -> Unit,
-    resolveUrl: (String?) -> String?
+    resolveUrl: (String?) -> String?,
+    localSocketDebugEnabled: Boolean = false,
+    onLocalSocketDebugChange: (Boolean) -> Unit = {}
 ) {
     val navController = rememberNavController()
     var renderFullUi by remember { mutableStateOf(false) }
@@ -277,7 +294,9 @@ fun AppNavigation(
                     updateState = updateState,
                     onCheckForUpdates = onCheckForUpdates,
                     onUpdateGithubCdn = onUpdateGithubCdn,
-                    resolveUrl = resolveUrl
+                    resolveUrl = resolveUrl,
+                    localSocketDebugEnabled = localSocketDebugEnabled,
+                    onLocalSocketDebugChange = onLocalSocketDebugChange
                 )
             }
 

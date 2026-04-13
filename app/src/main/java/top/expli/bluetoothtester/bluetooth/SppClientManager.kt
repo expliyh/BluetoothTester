@@ -10,13 +10,18 @@ import java.util.UUID
 class SppClientManager(
     context: Context,
     private val targetDevice: BluetoothDevice,
-    private val sppUuid: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
+    private val sppUuid: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB"),
+    private val secure: Boolean = true
 ) : SocketLikeBluetoothClientManager(context) {
 
     override val device: BluetoothDevice = targetDevice
 
     override fun createSocket(): BluetoothSocket? = try {
-        targetDevice.createRfcommSocketToServiceRecord(sppUuid)
+        if (secure) {
+            targetDevice.createRfcommSocketToServiceRecord(sppUuid)
+        } else {
+            targetDevice.createInsecureRfcommSocketToServiceRecord(sppUuid)
+        }
     } catch (_: IOException) {
         null
     }
