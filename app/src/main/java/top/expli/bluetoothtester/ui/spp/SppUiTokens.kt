@@ -20,7 +20,6 @@ internal fun SppRole.icon(): ImageVector = when (this) {
 internal fun SppConnectionState.label(): String = when (this) {
     SppConnectionState.Idle -> "未连接"
     SppConnectionState.Connecting -> "连接中"
-    SppConnectionState.Listening -> "监听中"
     SppConnectionState.Connected -> "已连接"
     SppConnectionState.Closed -> "已关闭"
     SppConnectionState.Error -> "异常"

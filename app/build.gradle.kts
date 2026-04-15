@@ -56,7 +56,11 @@ android {
     }
 
     buildTypes {
+        debug {
+            buildConfigField("boolean", "ENABLE_LOCAL_SOCKET_DEBUG", "true")
+        }
         release {
+            buildConfigField("boolean", "ENABLE_LOCAL_SOCKET_DEBUG", "false")
             signingConfig =
                 if (hasSigning) signingConfigs.getByName("release") else signingConfigs.getByName("debug")
             isMinifyEnabled = false

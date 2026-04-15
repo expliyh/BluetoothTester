@@ -27,7 +27,10 @@ data class SpeedTestResult(
     val rxReadMaxMs: Double? = null,
     val rxReadAvgBytes: Double? = null,
     val txFirstWriteDelayMs: Long? = null,
-    val rxFirstByteDelayMs: Long? = null
+    val rxFirstByteDelayMs: Long? = null,
+    val validatedPackets: Long? = null,   // CRC 校验通过的包数（仅校验模式有值）
+    val failedPackets: Long? = null,      // CRC 校验失败的包数（FrameSyncReader 静默丢弃，当前实现中始终为 0）
+    val sequenceErrors: Long? = null      // 序号不连续的包数（仅校验模式有值，CRC 通过但序号跳跃）
 )
 
 data class SpeedTestDiagnostics(
@@ -40,11 +43,27 @@ data class SpeedTestDiagnostics(
     val rxFirstByteDelayMs: Long?
 )
 
+data class PacketSpeedTestConfig(
+    val sendPayloadSize: Int = 512,
+    val withCrc: Boolean = false,
+    val stopCondition: StopCondition,
+    val txEnabled: Boolean = true,
+    val rxEnabled: Boolean = true
+)
+
+sealed interface StopCondition {
+    data class ByBytes(val totalBytes: Long) : StopCondition
+    data class ByDuration(val durationMs: Long) : StopCondition
+}
+
 abstract class SendRecvBluetoothProfileManager(context: Context) :
     BasicBluetoothProfileManager(context) {
     protected var socket: BluetoothSocket? = null
     protected var input: InputStream? = null
     protected var output: OutputStream? = null
+
+    /** 公开 InputStream 引用，供 FrameSyncReader 等外部组件使用 */
+    val inputStream: InputStream? get() = input
 
     open fun send(bytes: ByteArray): Boolean {
         val out = output ?: return false
@@ -664,6 +683,328 @@ abstract class SendRecvBluetoothProfileManager(context: Context) :
             txFirstWriteDelayMs = null,
             rxFirstByteDelayMs =
                 rxStartNs.get().takeIf { it > 0 }?.let { start -> (start - testStart) / 1_000_000 }
+        )
+    }
+
+    /**
+     * 使用 Test_Packet 格式的定量/定时吞吐测速。
+     * TX 端使用 TestPacketBuilder 预分配缓冲区，零分配热路径更新序号和 CRC。
+     * RX 端使用 FrameSyncReader 解析包，CRC 模式下统计 validatedPackets/sequenceErrors。
+     * 支持 ByBytes（发送完指定字节数停止）和 ByDuration（按时间停止）两种终止条件。
+     * 复用现有 monitor 协程模式（500ms 采样、progress 回调、diagnostics 回调）。
+     */
+    open suspend fun speedTestWithPacketFormat(
+        config: PacketSpeedTestConfig,
+        progress: ((txInstantBps: Double, rxInstantBps: Double, txAvgBps: Double, rxAvgBps: Double, txTotalBytes: Long, rxTotalBytes: Long, elapsedMs: Long) -> Unit)? = null,
+        diagnostics: ((SpeedTestDiagnostics) -> Unit)? = null
+    ): SpeedTestResult? = coroutineScope {
+        val payloadSize = config.sendPayloadSize
+        val withCrc = config.withCrc
+        if (payloadSize <= 0 || payloadSize > TestPacketBuilder.MAX_PAYLOAD_SIZE) return@coroutineScope null
+        if (!config.txEnabled && !config.rxEnabled) return@coroutineScope null
+
+        val packetSize = TestPacketBuilder.HEADER_SIZE + payloadSize +
+                if (withCrc) TestPacketBuilder.CRC_SIZE else 0
+
+        val bytesSent = AtomicLong(0L)
+        val bytesReceived = AtomicLong(0L)
+        val txStartNs = AtomicLong(0L)
+        val rxStartNs = AtomicLong(0L)
+        val txWriteOps = AtomicLong(0L)
+        val txWriteTotalNs = AtomicLong(0L)
+        val txWriteMaxNs = AtomicLong(0L)
+        val rxReadOps = AtomicLong(0L)
+        val rxReadTotalNs = AtomicLong(0L)
+        val rxReadMaxNs = AtomicLong(0L)
+        val rxValidated = AtomicLong(0L)
+        val rxSequenceErrors = AtomicLong(0L)  // 序号不连续计数（CRC 通过但序号跳跃）
+        val failed = AtomicBoolean(false)
+        val isRunning = AtomicBoolean(true)
+        val testStart = System.nanoTime()
+
+        // Determine stop condition parameters
+        val stopByBytes = config.stopCondition is StopCondition.ByBytes
+        val targetBytes = if (stopByBytes) (config.stopCondition as StopCondition.ByBytes).totalBytes else Long.MAX_VALUE
+        val durationMs = if (!stopByBytes) (config.stopCondition as StopCondition.ByDuration).durationMs else Long.MAX_VALUE
+
+        // TX sender coroutine
+        val sender = if (!config.txEnabled) null else launch(Dispatchers.IO) {
+            val out = output ?: run {
+                failed.set(true)
+                isRunning.set(false)
+                return@launch
+            }
+            val buffer = TestPacketBuilder.allocateBuffer(payloadSize, withCrc)
+            var seq = 0L
+            var pending = 0L
+            var localOps = 0L
+            var localTotalNs = 0L
+            var localMaxNs = 0L
+
+            while (isRunning.get() && isActive) {
+                // Check ByBytes stop condition: total sent bytes (including header+CRC) >= target
+                if (stopByBytes && bytesSent.get() + pending >= targetBytes) break
+
+                // Update sequence and CRC in pre-allocated buffer
+                if (withCrc) {
+                    TestPacketBuilder.updateSequenceAndCrc(buffer, seq, payloadSize)
+                } else {
+                    TestPacketBuilder.updateSequence(buffer, seq)
+                }
+                seq = (seq + 1) and 0xFFFFFFFFL
+
+                val t0 = System.nanoTime()
+                try {
+                    out.write(buffer)
+                    txStartNs.compareAndSet(0L, System.nanoTime())
+                } catch (_: IOException) {
+                    failed.set(true)
+                    isRunning.set(false)
+                    break
+                }
+                val dt = System.nanoTime() - t0
+                localOps += 1
+                localTotalNs += dt
+                if (dt > localMaxNs) localMaxNs = dt
+                pending += packetSize.toLong()
+
+                if (pending >= 64 * 1024) {
+                    bytesSent.addAndGet(pending)
+                    pending = 0L
+                    if (localOps > 0) {
+                        txWriteOps.addAndGet(localOps)
+                        txWriteTotalNs.addAndGet(localTotalNs)
+                        while (true) {
+                            val prev = txWriteMaxNs.get()
+                            if (localMaxNs <= prev) break
+                            if (txWriteMaxNs.compareAndSet(prev, localMaxNs)) break
+                        }
+                        localOps = 0L
+                        localTotalNs = 0L
+                        localMaxNs = 0L
+                    }
+                }
+            }
+            try { out.flush() } catch (_: IOException) {}
+            if (localOps > 0) {
+                txWriteOps.addAndGet(localOps)
+                txWriteTotalNs.addAndGet(localTotalNs)
+                while (true) {
+                    val prev = txWriteMaxNs.get()
+                    if (localMaxNs <= prev) break
+                    if (txWriteMaxNs.compareAndSet(prev, localMaxNs)) break
+                }
+            }
+            if (pending > 0) bytesSent.addAndGet(pending)
+        }
+
+        // RX receiver coroutine
+        val receiver = if (!config.rxEnabled) null else launch(Dispatchers.IO) {
+            val inp = input ?: run {
+                failed.set(true)
+                isRunning.set(false)
+                return@launch
+            }
+            val reader = FrameSyncReader(inp, withCrc)
+            var expectedSeq = 0L
+            var pending = 0L
+            var localOps = 0L
+            var localTotalNs = 0L
+            var localMaxNs = 0L
+
+            while (isRunning.get() && isActive) {
+                val t0 = System.nanoTime()
+                val packet = try {
+                    reader.readPacket()
+                } catch (_: IOException) {
+                    failed.set(true)
+                    isRunning.set(false)
+                    break
+                }
+                val dt = System.nanoTime() - t0
+                localOps += 1
+                localTotalNs += dt
+                if (dt > localMaxNs) localMaxNs = dt
+
+                if (packet == null) {
+                    // Stream ended
+                    isRunning.set(false)
+                    break
+                }
+
+                rxStartNs.compareAndSet(0L, System.nanoTime())
+                val rawLen = packet.rawBytes.size.toLong()
+                pending += rawLen
+
+                if (withCrc) {
+                    // CRC mode: packet.crcValid is always true here (FrameSyncReader only emits valid CRC packets)
+                    rxValidated.incrementAndGet()
+                    // Sequence check: if not matching expected, count as sequence error (don't disconnect — that's ViewModel's job per R2.9)
+                    if (packet.sequenceNumber != expectedSeq) {
+                        rxSequenceErrors.incrementAndGet()
+                    }
+                    expectedSeq = (packet.sequenceNumber + 1) and 0xFFFFFFFFL
+                }
+                // NoCRC mode: skip sequence validation
+
+                if (pending >= 64 * 1024) {
+                    bytesReceived.addAndGet(pending)
+                    pending = 0L
+                    if (localOps > 0) {
+                        rxReadOps.addAndGet(localOps)
+                        rxReadTotalNs.addAndGet(localTotalNs)
+                        while (true) {
+                            val prev = rxReadMaxNs.get()
+                            if (localMaxNs <= prev) break
+                            if (rxReadMaxNs.compareAndSet(prev, localMaxNs)) break
+                        }
+                        localOps = 0L
+                        localTotalNs = 0L
+                        localMaxNs = 0L
+                    }
+                }
+            }
+            if (localOps > 0) {
+                rxReadOps.addAndGet(localOps)
+                rxReadTotalNs.addAndGet(localTotalNs)
+                while (true) {
+                    val prev = rxReadMaxNs.get()
+                    if (localMaxNs <= prev) break
+                    if (rxReadMaxNs.compareAndSet(prev, localMaxNs)) break
+                }
+            }
+            if (pending > 0) bytesReceived.addAndGet(pending)
+        }
+
+        // Monitor coroutine: 500ms sampling, progress/diagnostics callbacks, stop condition check
+        val monitor = launch(Dispatchers.Default) {
+            var lastTxBytes = 0L
+            var lastRxBytes = 0L
+            var lastTime = System.nanoTime()
+            val intervalMs = 500L
+
+            while (isRunning.get() && isActive) {
+                delay(intervalMs)
+
+                val currentTime = System.nanoTime()
+                val currentTxBytes = bytesSent.get()
+                val currentRxBytes = bytesReceived.get()
+                val deltaTime = (currentTime - lastTime) / 1_000_000_000.0
+                val totalTime = (currentTime - testStart) / 1_000_000_000.0
+
+                if (deltaTime > 0) {
+                    val deltaTxBytes = currentTxBytes - lastTxBytes
+                    val deltaRxBytes = currentRxBytes - lastRxBytes
+                    val txInstantSpeed = deltaTxBytes / deltaTime
+                    val rxInstantSpeed = deltaRxBytes / deltaTime
+
+                    val txAvgSpeed = if (!config.txEnabled) 0.0 else {
+                        val start = txStartNs.get()
+                        val txTime = if (start == 0L) 0.0 else (currentTime - start) / 1_000_000_000.0
+                        if (txTime > 0) currentTxBytes / txTime else 0.0
+                    }
+                    val rxAvgSpeed = if (!config.rxEnabled) 0.0 else {
+                        val start = rxStartNs.get()
+                        val rxTime = if (start == 0L) 0.0 else (currentTime - start) / 1_000_000_000.0
+                        if (rxTime > 0) currentRxBytes / rxTime else 0.0
+                    }
+
+                    diagnostics?.invoke(
+                        SpeedTestDiagnostics(
+                            txWriteAvgMs = txWriteOps.get().takeIf { it > 0 }?.let { ops ->
+                                (txWriteTotalNs.get().toDouble() / ops) / 1_000_000.0
+                            },
+                            txWriteMaxMs = txWriteMaxNs.get().takeIf { it > 0 }?.let { it / 1_000_000.0 },
+                            rxReadAvgMs = rxReadOps.get().takeIf { it > 0 }?.let { ops ->
+                                (rxReadTotalNs.get().toDouble() / ops) / 1_000_000.0
+                            },
+                            rxReadMaxMs = rxReadMaxNs.get().takeIf { it > 0 }?.let { it / 1_000_000.0 },
+                            rxReadAvgBytes = rxReadOps.get().takeIf { it > 0 }?.let { ops ->
+                                currentRxBytes.toDouble() / ops
+                            },
+                            txFirstWriteDelayMs = txStartNs.get().takeIf { it > 0 }?.let { start ->
+                                (start - testStart) / 1_000_000
+                            },
+                            rxFirstByteDelayMs = rxStartNs.get().takeIf { it > 0 }?.let { start ->
+                                (start - testStart) / 1_000_000
+                            }
+                        )
+                    )
+
+                    progress?.invoke(
+                        txInstantSpeed, rxInstantSpeed,
+                        txAvgSpeed, rxAvgSpeed,
+                        currentTxBytes, currentRxBytes,
+                        (totalTime * 1000).toLong()
+                    )
+
+                    lastTxBytes = currentTxBytes
+                    lastRxBytes = currentRxBytes
+                    lastTime = currentTime
+                }
+
+                // Check stop conditions
+                val elapsed = totalTime * 1000.0
+                val shouldStop = when {
+                    stopByBytes && currentTxBytes >= targetBytes -> true
+                    !stopByBytes && elapsed >= durationMs -> true
+                    else -> false
+                }
+                if (shouldStop) return@launch
+            }
+        }
+
+        monitor.join()
+        isRunning.set(false)
+        sender?.cancel()
+        receiver?.cancel()
+
+        if (failed.get()) return@coroutineScope null
+
+        val endTime = System.nanoTime()
+        val durationNs = endTime - testStart
+        val durationSec = durationNs / 1_000_000_000.0
+        if (durationSec <= 0) return@coroutineScope null
+
+        val txBytes = bytesSent.get()
+        val rxBytes = bytesReceived.get()
+
+        val txDurationSec = if (config.txEnabled) {
+            val start = txStartNs.get()
+            if (start == 0L) 0.0 else (endTime - start) / 1_000_000_000.0
+        } else 0.0
+
+        val rxDurationSec = if (config.rxEnabled) {
+            val start = rxStartNs.get()
+            if (start == 0L) 0.0 else (endTime - start) / 1_000_000_000.0
+        } else 0.0
+
+        SpeedTestResult(
+            txAvgBps = if (txDurationSec > 0) txBytes.toDouble() / txDurationSec else 0.0,
+            rxAvgBps = if (rxDurationSec > 0) rxBytes.toDouble() / rxDurationSec else 0.0,
+            txTotalBytes = txBytes,
+            rxTotalBytes = rxBytes,
+            durationMs = durationNs / 1_000_000,
+            txWriteAvgMs = txWriteOps.get().takeIf { it > 0 }?.let { ops ->
+                (txWriteTotalNs.get().toDouble() / ops) / 1_000_000.0
+            },
+            txWriteMaxMs = txWriteMaxNs.get().takeIf { it > 0 }?.let { it / 1_000_000.0 },
+            rxReadAvgMs = rxReadOps.get().takeIf { it > 0 }?.let { ops ->
+                (rxReadTotalNs.get().toDouble() / ops) / 1_000_000.0
+            },
+            rxReadMaxMs = rxReadMaxNs.get().takeIf { it > 0 }?.let { it / 1_000_000.0 },
+            rxReadAvgBytes = rxReadOps.get().takeIf { it > 0 }?.let { ops ->
+                rxBytes.toDouble() / ops
+            },
+            txFirstWriteDelayMs = txStartNs.get().takeIf { it > 0 }?.let { start ->
+                (start - testStart) / 1_000_000
+            },
+            rxFirstByteDelayMs = rxStartNs.get().takeIf { it > 0 }?.let { start ->
+                (start - testStart) / 1_000_000
+            },
+            validatedPackets = if (withCrc) rxValidated.get() else null,
+            failedPackets = null,  // CRC 失败的包被 FrameSyncReader 静默丢弃，无法在此统计
+            sequenceErrors = if (withCrc) rxSequenceErrors.get() else null
         )
     }
 }

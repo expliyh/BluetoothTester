@@ -5,24 +5,29 @@ import android.app.Activity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -33,62 +38,92 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
-import androidx.navigation.compose.currentBackStackEntryAsState
-import androidx.navigation.compose.rememberNavController
 import kotlinx.coroutines.launch
-import top.expli.bluetoothtester.model.SppConnectionState
 import top.expli.bluetoothtester.model.SppViewModel
-import top.expli.bluetoothtester.ui.navigation.AppNavTransitions
 import top.expli.bluetoothtester.ui.permissions.BluetoothPermissions
 import top.expli.bluetoothtester.ui.permissions.openAppSettings
 import top.expli.bluetoothtester.ui.common.BondedDeviceItem
 import top.expli.bluetoothtester.ui.common.BondedDeviceLoadResult
 import top.expli.bluetoothtester.ui.common.DevicePickerSheet
 import top.expli.bluetoothtester.ui.common.loadBondedDeviceItems
-import top.expli.bluetoothtester.ui.spp.AddSppDeviceDialog
-import top.expli.bluetoothtester.ui.spp.SppDetailScreen
-import top.expli.bluetoothtester.ui.spp.SppListScreen
-import top.expli.bluetoothtester.ui.spp.SppRoute
-import top.expli.bluetoothtester.ui.spp.label
-import top.expli.bluetoothtester.ui.spp.uniqueKey
+import top.expli.bluetoothtester.ui.spp.AddServerDialog
+import top.expli.bluetoothtester.ui.spp.ClientTabPage
+import top.expli.bluetoothtester.ui.spp.ServerTabPage
 import java.util.concurrent.atomic.AtomicReference
 
 @SuppressLint("MissingPermission")
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun SppScreen(onBackClick: () -> Unit) {
     val vm: SppViewModel = viewModel()
     val state by vm.uiState.collectAsState()
-    val latestState by rememberUpdatedState(state)
-    val selectedSession = state.selectedKey?.let { state.sessions[it] }
-    var showAddDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val activity = context as? Activity
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
+    var showAddServerDialog by remember { mutableStateOf(false) }
     var showPermissionRationaleDialog by remember { mutableStateOf(false) }
     var showPermissionSettingsDialog by remember { mutableStateOf(false) }
     var showBondedDevicePicker by remember { mutableStateOf(false) }
     var bondedDevices by remember { mutableStateOf<List<BondedDeviceItem>>(emptyList()) }
     val pendingBluetoothAction = remember { AtomicReference<(() -> Unit)?>(null) }
-    val bondedDevicePickerOnSelect =
-        remember { AtomicReference<((String, String?) -> Unit)?>(null) }
+    val bondedDevicePickerOnSelect = remember { AtomicReference<((String, String?) -> Unit)?>(null) }
 
-    val navController = rememberNavController()
-    val backStackEntry by navController.currentBackStackEntryAsState()
-    val inDetail = backStackEntry != null && navController.previousBackStackEntry != null
+    // Delete confirmation state
+    var deleteTabId by remember { mutableStateOf<String?>(null) }
 
+    // Client tab detail state
+    var clientIsInDetail by remember { mutableStateOf(false) }
+    var clientDetailBackHandler: (() -> Unit)? by remember { mutableStateOf(null) }
+
+    // Server tab detail state
+    var serverIsInDetail by remember { mutableStateOf(false) }
+    var serverDetailBackHandler: (() -> Unit)? by remember { mutableStateOf(null) }
+    var serverDetailAddress by remember { mutableStateOf<String?>(null) }
+    var serverDetailIsHistory by remember { mutableStateOf(false) }
+
+    // Scroll to latest callback
+    var scrollToLatest: (() -> Unit)? by remember { mutableStateOf(null) }
+
+    val serverTabs = state.serverTabs
+    val pageCount = 1 + serverTabs.size // Client + Server tabs
+
+    val pagerState = rememberPagerState(pageCount = { pageCount })
+
+    // Sync pager when a new server tab is added (auto-switch to it)
+    var pendingScrollToTab by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(serverTabs.size) {
+        pendingScrollToTab?.let { tabId ->
+            val index = serverTabs.indexOfFirst { it.tabId == tabId } + 1  // +1 for Client tab at index 0
+            if (index > 0) {
+                pagerState.animateScrollToPage(index)
+                pendingScrollToTab = null
+            }
+            // index <= 0 时不清除，等待下一次 serverTabs 更新
+        }
+    }
+
+    // Select server tab when pager page changes
+    LaunchedEffect(pagerState) {
+        snapshotFlow { pagerState.currentPage }.collect { page ->
+            if (page > 0 && page <= serverTabs.size) {
+                val tab = serverTabs[page - 1]
+                vm.selectServerTab(tab.tabId)
+            }
+        }
+    }
+
+    // Permission launcher
     val bluetoothPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { result ->
@@ -122,29 +157,23 @@ fun SppScreen(onBackClick: () -> Unit) {
         ensureBluetoothPermissions {
             val result = runCatching { loadBondedDeviceItems(context) }.getOrElse {
                 scope.launch {
-                    snackbarHostState.showSnackbar(
-                        "读取已绑定设备失败: ${it.message ?: it::class.java.simpleName}"
-                    )
+                    snackbarHostState.showSnackbar("读取已绑定设备失败: ${it.message ?: it::class.java.simpleName}")
                 }
                 return@ensureBluetoothPermissions
             }
             when (result) {
                 is BondedDeviceLoadResult.Success -> {
                     if (result.devices.isEmpty()) {
-                        scope.launch {
-                            snackbarHostState.showSnackbar("未找到已绑定设备，请先在系统蓝牙设置中配对")
-                        }
+                        scope.launch { snackbarHostState.showSnackbar("未找到已绑定设备，请先在系统蓝牙设置中配对") }
                     } else {
                         bondedDevices = result.devices
                         bondedDevicePickerOnSelect.set(onPicked)
                         showBondedDevicePicker = true
                     }
                 }
-
                 BondedDeviceLoadResult.BluetoothDisabled -> scope.launch {
                     snackbarHostState.showSnackbar("蓝牙未开启，请先开启蓝牙")
                 }
-
                 BondedDeviceLoadResult.BluetoothUnavailable -> scope.launch {
                     snackbarHostState.showSnackbar("本机蓝牙不可用")
                 }
@@ -152,176 +181,275 @@ fun SppScreen(onBackClick: () -> Unit) {
         }
     }
 
-    LaunchedEffect(selectedSession?.lastError) {
-        selectedSession?.lastError?.let { msg ->
+    // Show error snackbar — selectedSession 用于 TopAppBar
+    val selectedSession = state.selectedKey?.let { state.sessions[it] }
+
+    // Back handler
+    BackHandler {
+        if (showAddServerDialog) {
+            showAddServerDialog = false
+        } else if (pagerState.currentPage == 0 && clientIsInDetail) {
+            // Let ClientTabPage handle its own back
+        } else if (pagerState.currentPage > 0 && serverIsInDetail) {
+            // Let ServerTabPage handle its own back
+        } else {
+            onBackClick()
+        }
+    }
+
+    // Determine TopAppBar content based on current tab
+    val currentPage = pagerState.currentPage
+    val isClientTab = currentPage == 0
+    val currentServerTab = if (!isClientTab && currentPage - 1 < serverTabs.size) {
+        serverTabs[currentPage - 1]
+    } else null
+
+    // 基于当前 pager page 获取对应 session，用于 Snackbar 错误提示
+    val currentPageSession = if (isClientTab) {
+        state.selectedKey?.let { state.sessions[it] }
+    } else {
+        currentServerTab?.let { tab -> state.sessions["server:${tab.tabId}"] }
+    }
+    LaunchedEffect(currentPageSession?.lastError) {
+        currentPageSession?.lastError?.let { msg ->
             snackbarHostState.showSnackbar("错误: $msg")
         }
     }
 
-    BackHandler {
-        if (showAddDialog) {
-            showAddDialog = false
-        } else {
-            if (inDetail) navController.navigateUp() else onBackClick()
-        }
-    }
-
-    // 用于存储滚动到最新消息的函数
-    var scrollToLatest: (() -> Unit)? by remember { mutableStateOf(null) }
-
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
-            val selected = selectedSession?.device
             TopAppBar(
                 title = {
-                    if (!inDetail || selected == null) {
-                        Text("SPP 工具")
-                    } else {
-                        Column(
-                            modifier = Modifier.combinedClickable(
-                                onClick = {},
-                                onDoubleClick = {
-                                    // 双击标题栏滚动到最新消息
-                                    scrollToLatest?.invoke()
-                                },
-                                indication = null,
-                                interactionSource = remember { MutableInteractionSource() }
-                            )
-                        ) {
-                            Text(
-                                text = selected.name,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            val subtitleShowsUuid = selected.address.isBlank()
-                            val subtitle = if (!subtitleShowsUuid) {
-                                "${selected.role.label()} · ${selected.address}"
-                            } else {
-                                "${selected.role.label()} · UUID: ${selected.uuid}"
-                            }
-                            Text(
-                                text = subtitle,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontFamily = if (subtitleShowsUuid) FontFamily.Monospace else null,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
+                    when {
+                        isClientTab && !clientIsInDetail -> {
+                            Text("SPP 客户端")
                         }
+                        isClientTab && clientIsInDetail -> {
+                            val selected = selectedSession?.device
+                            if (selected != null) {
+                                Column(
+                                    modifier = Modifier.combinedClickable(
+                                        onClick = {},
+                                        onDoubleClick = { scrollToLatest?.invoke() },
+                                        indication = null,
+                                        interactionSource = remember { MutableInteractionSource() }
+                                    )
+                                ) {
+                                    Text(
+                                        text = selected.name,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        text = "客户端 · ${selected.address}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            } else {
+                                Text("SPP 客户端")
+                            }
+                        }
+                        currentServerTab != null && serverIsInDetail -> {
+                            Column(
+                                modifier = Modifier.combinedClickable(
+                                    onClick = {},
+                                    onDoubleClick = { scrollToLatest?.invoke() },
+                                    indication = null,
+                                    interactionSource = remember { MutableInteractionSource() }
+                                )
+                            ) {
+                                Text(
+                                    text = serverDetailAddress ?: currentServerTab.name,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = if (serverDetailIsHistory) "历史 · ${currentServerTab.name}" else "服务端 · ${currentServerTab.name}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                        currentServerTab != null -> {
+                            Column(
+                                modifier = Modifier.combinedClickable(
+                                    onClick = {},
+                                    onDoubleClick = { scrollToLatest?.invoke() },
+                                    indication = null,
+                                    interactionSource = remember { MutableInteractionSource() }
+                                )
+                            ) {
+                                Text(
+                                    text = currentServerTab.name,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = "服务端 · UUID: ${currentServerTab.uuid}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontFamily = FontFamily.Monospace,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                        else -> Text("SPP 客户端")
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = { if (inDetail) navController.navigateUp() else onBackClick() }) {
-                        Icon(
-                            if (inDetail) Icons.AutoMirrored.Filled.ArrowBack else Icons.Default.Link,
-                            contentDescription = "Back"
-                        )
+                    if (isClientTab && clientIsInDetail) {
+                        IconButton(onClick = { clientDetailBackHandler?.invoke() }) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        }
+                    } else if (!isClientTab && serverIsInDetail) {
+                        IconButton(onClick = { serverDetailBackHandler?.invoke() }) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        }
+                    } else {
+                        IconButton(onClick = onBackClick) {
+                            Icon(Icons.Default.Link, contentDescription = "返回")
+                        }
                     }
                 },
                 actions = {
-                    if (!inDetail) {
-                        IconButton(onClick = { showAddDialog = true }) {
-                            Icon(Icons.Default.Add, contentDescription = "注册 Socket")
-                        }
-                    } else {
-                        AssistChip(
-                            onClick = {},
-                            label = {
-                                Text(
-                                    (selectedSession?.connectionState
-                                        ?: SppConnectionState.Idle).label()
-                                )
-                            }
-                        )
-                    }
+                    // No actions for Client tab (connect form or detail)
                 }
             )
         }
     ) { inner ->
-        NavHost(
-            navController = navController,
-            startDestination = SppRoute.List,
-            enterTransition = AppNavTransitions.enter,
-            exitTransition = AppNavTransitions.exit,
-            popEnterTransition = AppNavTransitions.popEnter,
-            popExitTransition = AppNavTransitions.popExit
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(inner)
         ) {
-            composable<SppRoute.List> {
-                SppListScreen(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(inner)
-                        .padding(12.dp),
-                    state = state,
-                    onOpenDetail = {
-                        vm.select(it)
-                        navController.navigate(SppRoute.Detail)
-                    },
-                    onDelete = { vm.remove(it.uniqueKey()) },
-                    onAdd = { showAddDialog = true }
+            // ── Tab Bar ──
+            ScrollableTabRow(
+                selectedTabIndex = currentPage,
+                edgePadding = 8.dp
+            ) {
+                // Client Tab
+                Tab(
+                    selected = currentPage == 0,
+                    onClick = { scope.launch { pagerState.animateScrollToPage(0) } },
+                    text = { Text("Client") }
+                )
+
+                // Server Tabs
+                serverTabs.forEachIndexed { index, tab ->
+                    Tab(
+                        selected = currentPage == index + 1,
+                        onClick = { scope.launch { pagerState.animateScrollToPage(index + 1) } },
+                        text = {
+                            Text(
+                                text = tab.name,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.combinedClickable(
+                                    onClick = { scope.launch { pagerState.animateScrollToPage(index + 1) } },
+                                    onLongClick = { deleteTabId = tab.tabId },
+                                    indication = null,
+                                    interactionSource = remember { MutableInteractionSource() }
+                                )
+                            )
+                        }
+                    )
+                }
+
+                // "+" Add button (not a real tab page)
+                Tab(
+                    selected = false,
+                    onClick = { showAddServerDialog = true },
+                    text = {
+                        Icon(
+                            Icons.Default.Add,
+                            contentDescription = "添加 Server",
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                 )
             }
 
-            composable<SppRoute.Detail> {
-                @Suppress("ASSIGNED_VALUE_IS_NEVER_READ")
-                SppDetailScreen(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(inner),
-                    sessionState = selectedSession,
-                    onTextChange = { vm.updateSendingText(it) },
-                    onPayloadChange = { vm.updatePayloadSize(it) },
-                    onSend = { vm.sendOnce() },
-                    onToggleSpeedTest = { ensureBluetoothPermissions { vm.toggleSpeedTest() } },
-                    onToggleSpeedTestMode = { vm.toggleSpeedTestMode() },
-                    onMuteConsoleDuringTestChange = { vm.setMuteConsoleDuringTest(it) },
-                    onSpeedTestWindowOpenChange = { vm.setSpeedTestWindowOpen(it) },
-                    onSpeedTestPayloadChange = { vm.updateSpeedTestPayload(it) },
-                    onParseIncomingAsTextChange = { vm.updateParseIncomingAsText(it) },
-                    onScrollToLatest = { scrollFn -> scrollToLatest = scrollFn },
-                    onToggleConnection = {
-                        val active =
-                            latestState.selectedKey?.let { latestState.sessions[it] }?.connectionState == SppConnectionState.Connected ||
-                                    latestState.selectedKey?.let { latestState.sessions[it] }?.connectionState == SppConnectionState.Listening
-                        if (active) {
-                            vm.disconnect()
-                        } else {
-                            ensureBluetoothPermissions { vm.connect() }
-                        }
-                    },
-                    onClearChat = { vm.clearChat() },
-                    onConnectFromBondedDevice = {
-                        requestBondedDevicePick { addr, name ->
-                            val selected =
-                                latestState.selectedKey?.let { latestState.sessions[it] }?.device
-                                    ?: return@requestBondedDevicePick
-                            val pickedName = name ?: addr
-                            val resolvedName =
-                                if (selected.name.isBlank() || selected.name == selected.address) pickedName else selected.name
-                            val updated =
-                                selected.copy(name = resolvedName, address = addr)
-                            ensureBluetoothPermissions {
-                                vm.select(updated)
-                                vm.connect()
-                            }
+            // ── Pager ──
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.fillMaxSize(),
+                beyondViewportPageCount = 1
+            ) { page ->
+                when (page) {
+                    0 -> ClientTabPage(
+                        vm = vm,
+                        state = state,
+                        snackbarHostState = snackbarHostState,
+                        ensureBluetoothPermissions = ::ensureBluetoothPermissions,
+                        requestBondedDevicePick = ::requestBondedDevicePick,
+                        onScrollToLatest = { scrollFn -> scrollToLatest = scrollFn },
+                        onIsInDetailChanged = { clientIsInDetail = it },
+                        onBackHandler = { handler -> clientDetailBackHandler = handler }
+                    )
+                    else -> {
+                        val tabIndex = page - 1
+                        if (tabIndex < serverTabs.size) {
+                            ServerTabPage(
+                                serverTab = serverTabs[tabIndex],
+                                vm = vm,
+                                state = state,
+                                ensureBluetoothPermissions = ::ensureBluetoothPermissions,
+                                onScrollToLatest = { scrollFn -> scrollToLatest = scrollFn },
+                                onIsInDetailChanged = { serverIsInDetail = it },
+                                onBackHandler = { handler -> serverDetailBackHandler = handler },
+                                onDetailInfo = { address, isHistory ->
+                                    serverDetailAddress = address
+                                    serverDetailIsHistory = isHistory
+                                }
+                            )
                         }
                     }
-                )
+                }
             }
         }
     }
 
-    if (showAddDialog) {
-        AddSppDeviceDialog(
-            onDismiss = { showAddDialog = false },
-            onConfirm = { device ->
-                vm.addOrUpdate(device)
-                showAddDialog = false
-            },
-            onPickBondedDevice = { onPicked ->
-                requestBondedDevicePick(onPicked)
+    // ── Dialogs ──
+
+    if (showAddServerDialog) {
+        AddServerDialog(
+            onDismiss = { showAddServerDialog = false },
+            onConfirm = { uuid, name ->
+                val newTabId = vm.addServerTab(uuid, name)
+                showAddServerDialog = false
+                // 记录待切换的 tabId，由 LaunchedEffect(serverTabs.size) 在状态更新后执行切换
+                pendingScrollToTab = newTabId
             }
+        )
+    }
+
+    // Delete Server Tab confirmation
+    deleteTabId?.let { tabId ->
+        val tabName = serverTabs.find { it.tabId == tabId }?.name ?: "Server"
+        AlertDialog(
+            onDismissRequest = { deleteTabId = null },
+            title = { Text("删除 Server Tab") },
+            text = { Text("确定删除「$tabName」？将停止监听并清理所有会话数据。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.removeServerTab(tabId)
+                    deleteTabId = null
+                    // If we were on the deleted tab, go back to Client
+                    scope.launch {
+                        if (pagerState.currentPage >= pageCount - 1) {
+                            pagerState.animateScrollToPage(0)
+                        }
+                    }
+                }) { Text("删除", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { deleteTabId = null }) { Text("取消") } }
         )
     }
 
@@ -333,7 +461,7 @@ fun SppScreen(onBackClick: () -> Unit) {
                 pendingBluetoothAction.set(null)
             },
             title = { Text("需要蓝牙权限") },
-            text = { Text("SPP 连接/监听需要授予“附近设备”相关的蓝牙连接与扫描权限。") },
+            text = { Text("SPP 连接/监听需要授予附近设备相关的蓝牙连接与扫描权限。") },
             confirmButton = {
                 TextButton(onClick = {
                     @Suppress("ASSIGNED_VALUE_IS_NEVER_READ")
@@ -364,11 +492,7 @@ fun SppScreen(onBackClick: () -> Unit) {
                 }) { Text("打开设置") }
             },
             dismissButton = {
-                TextButton(onClick = { showPermissionSettingsDialog = false }) {
-                    Text(
-                        "取消"
-                    )
-                }
+                TextButton(onClick = { showPermissionSettingsDialog = false }) { Text("取消") }
             }
         )
     }

@@ -73,7 +73,9 @@ fun SettingsScreen(
     updateState: AppUpdateUiState,
     onCheckForUpdates: () -> Unit,
     onUpdateGithubCdn: (String) -> Unit,
-    resolveUrl: (String?) -> String?
+    resolveUrl: (String?) -> String?,
+    localSocketDebugEnabled: Boolean = false,
+    onLocalSocketDebugChange: (Boolean) -> Unit = {}
 ) {
     val surfaceColor = MaterialTheme.colorScheme.surface
     val context = LocalContext.current
@@ -83,6 +85,10 @@ fun SettingsScreen(
     var showUpdateDialog by remember { mutableStateOf(false) }
     var showGithubCdnDialog by remember { mutableStateOf(false) }
     var githubCdnDraft by remember { mutableStateOf(updateState.githubCdn) }
+    // 隐藏开发者选项：连续点击"关于应用"7 次激活
+    var aboutTapCount by remember { mutableStateOf(0) }
+    var lastTapTime by remember { mutableStateOf(0L) }
+    var devModeUnlocked by remember { mutableStateOf(localSocketDebugEnabled) }
 
     Surface(color = surfaceColor) {
         Scaffold(
@@ -206,8 +212,32 @@ fun SettingsScreen(
                         icon = Icons.Default.Info,
                         title = "关于应用",
                         description = "版本 ${updateState.currentVersionName}",
-                        onClick = { /* TODO: 打开关于页面 */ }
+                        onClick = {
+                            if (top.expli.bluetoothtester.BuildConfig.ENABLE_LOCAL_SOCKET_DEBUG) {
+                                val now = System.currentTimeMillis()
+                                if (now - lastTapTime > 2000) aboutTapCount = 0
+                                lastTapTime = now
+                                aboutTapCount++
+                                if (aboutTapCount >= 7 && !devModeUnlocked) {
+                                    devModeUnlocked = true
+                                    onLocalSocketDebugChange(true)
+                                }
+                            }
+                        }
                     )
+                }
+
+                // LocalSocket 调试模式（仅 debug 构建 + 连续点击 7 次后显示）
+                if (devModeUnlocked && top.expli.bluetoothtester.BuildConfig.ENABLE_LOCAL_SOCKET_DEBUG) {
+                    item {
+                        SettingsToggleItem(
+                            icon = Icons.Default.Bluetooth,
+                            title = "LocalSocket 调试",
+                            description = "使用 LocalSocket 替代蓝牙传输（开发调试用）",
+                            checked = localSocketDebugEnabled,
+                            onCheckedChange = onLocalSocketDebugChange
+                        )
+                    }
                 }
 
                 item {

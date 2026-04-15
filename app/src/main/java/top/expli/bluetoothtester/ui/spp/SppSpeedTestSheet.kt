@@ -8,9 +8,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
@@ -29,10 +31,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import top.expli.bluetoothtester.model.SppConnectionState
 import top.expli.bluetoothtester.model.SppSession
 import top.expli.bluetoothtester.model.SppSpeedTestMode
+import top.expli.bluetoothtester.util.formatBps
+import top.expli.bluetoothtester.util.formatBytes
+import top.expli.bluetoothtester.util.formatElapsedMs
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -43,7 +49,10 @@ fun SppSpeedTestSheet(
     onToggleSpeedTestMode: () -> Unit,
     onMuteConsoleDuringTestChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
-    onSpeedTestPayloadChange: (String) -> Unit = {}
+    onSpeedTestPayloadChange: (String) -> Unit = {},
+    onSpeedTestWithCrcChange: (Boolean) -> Unit = {},
+    onSpeedTestTargetBytesChange: (Long) -> Unit = {},
+    onSendPayloadSizeChange: (Int) -> Unit = {}
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var showPayloadDialog by remember { mutableStateOf(false) }
@@ -65,20 +74,11 @@ fun SppSpeedTestSheet(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text("SPP 测速", style = MaterialTheme.typography.titleMedium)
-                    val modeLabel =
-                        when (session.speedTestMode) {
-                            SppSpeedTestMode.TxOnly -> "单向TX"
-                            SppSpeedTestMode.RxOnly -> "单向RX"
-                            SppSpeedTestMode.Duplex -> "双向"
-                        }
-                    AssistChip(
-                        onClick = onToggleSpeedTestMode,
-                        enabled = !session.speedTestRunning,
-                        label = {
-                            Text(
-                                "${if (session.speedTestRunning) "测速中" else "已停止"} · $modeLabel"
-                            )
-                        }
+                    // 发起方固定为发送方，不需要模式切换
+                    Text(
+                        if (session.speedTestRunning) "测速中" else "已停止",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
@@ -130,6 +130,111 @@ fun SppSpeedTestSheet(
                 )
             }
 
+            // ── 校验模式开关 ──
+            item {
+                ListItem(
+                    headlineContent = { Text("校验模式") },
+                    supportingContent = {
+                        Text(
+                            if (session.speedTestWithCrc) "CRC-16 校验（含序号检查）" else "无校验（最大吞吐）"
+                        )
+                    },
+                    trailingContent = {
+                        Switch(
+                            checked = session.speedTestWithCrc,
+                            onCheckedChange = onSpeedTestWithCrcChange,
+                            enabled = !session.speedTestRunning
+                        )
+                    }
+                )
+            }
+
+            // ── 数据量输入框（始终显示） ──
+            item {
+                var selectedUnit by remember { mutableStateOf(if (session.speedTestTargetBytes >= 1_048_576) "MB" else "KB") }
+                var textValue by remember {
+                    val displayValue = if (selectedUnit == "MB") {
+                        session.speedTestTargetBytes / 1_048_576
+                    } else {
+                        session.speedTestTargetBytes / 1024
+                    }
+                    mutableStateOf(displayValue.toString())
+                }
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = textValue,
+                        onValueChange = { newText ->
+                            textValue = newText
+                            val num = newText.toLongOrNull()
+                            if (num != null && num > 0) {
+                                val bytes = if (selectedUnit == "MB") num * 1_048_576 else num * 1024
+                                onSpeedTestTargetBytesChange(bytes)
+                            }
+                        },
+                        label = { Text("数据总量") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        enabled = !session.speedTestRunning,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = selectedUnit == "KB",
+                            onClick = {
+                                selectedUnit = "KB"
+                                val num = textValue.toLongOrNull()
+                                if (num != null && num > 0) {
+                                    onSpeedTestTargetBytesChange(num * 1024)
+                                }
+                            },
+                            label = { Text("KB") },
+                            enabled = !session.speedTestRunning
+                        )
+                        FilterChip(
+                            selected = selectedUnit == "MB",
+                            onClick = {
+                                selectedUnit = "MB"
+                                val num = textValue.toLongOrNull()
+                                if (num != null && num > 0) {
+                                    onSpeedTestTargetBytesChange(num * 1_048_576)
+                                }
+                            },
+                            label = { Text("MB") },
+                            enabled = !session.speedTestRunning
+                        )
+                    }
+                }
+            }
+
+            // ── sendPayloadSize 输入框 ──
+            item {
+                var payloadSizeText by remember { mutableStateOf(session.sendPayloadSize.toString()) }
+
+                OutlinedTextField(
+                    value = payloadSizeText,
+                    onValueChange = { newText ->
+                        payloadSizeText = newText
+                        val num = newText.toIntOrNull()
+                        if (num != null && num in 1..32768) {
+                            onSendPayloadSizeChange(num)
+                        }
+                    },
+                    label = { Text("发送Payload大小（字节）") },
+                    supportingText = { Text("范围 1~32768，默认 512") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    enabled = !session.speedTestRunning,
+                    isError = payloadSizeText.toIntOrNull()?.let { it !in 1..32768 } ?: payloadSizeText.isNotEmpty(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                )
+            }
+
             item {
                 ListItem(
                     headlineContent = { Text("测速时抑制控制台输出") },
@@ -148,21 +253,29 @@ fun SppSpeedTestSheet(
                 )
             }
 
+            // 只显示有数据的方向：发起方显示 TX，被动接收方显示 RX
             item {
-                SpeedSummary(
-                    title = "发送",
-                    instantBps = session.speedTestTxInstantBps,
-                    avgBps = session.speedTestTxAvgBps,
-                    totalBytes = session.speedTestTxTotalBytes
-                )
-            }
-            item {
-                SpeedSummary(
-                    title = "接收",
-                    instantBps = session.speedTestRxInstantBps,
-                    avgBps = session.speedTestRxAvgBps,
-                    totalBytes = session.speedTestRxTotalBytes
-                )
+                val hasTx = session.speedTestTxTotalBytes > 0 || session.speedTestTxAvgBps != null
+                val hasRx = session.speedTestRxTotalBytes > 0 || session.speedTestRxAvgBps != null
+                if (hasTx) {
+                    SpeedSummary(
+                        title = "吞吐",
+                        avgBps = session.speedTestTxAvgBps,
+                        totalBytes = session.speedTestTxTotalBytes
+                    )
+                } else if (hasRx) {
+                    SpeedSummary(
+                        title = "吞吐",
+                        avgBps = session.speedTestRxAvgBps,
+                        totalBytes = session.speedTestRxTotalBytes
+                    )
+                } else {
+                    SpeedSummary(
+                        title = "吞吐",
+                        avgBps = null,
+                        totalBytes = 0
+                    )
+                }
             }
             item {
                 ListItem(
@@ -192,23 +305,13 @@ fun SppSpeedTestSheet(
                 }
             } else {
                 items(session.speedTestSamples, key = { it.id }) { s ->
+                    // 只显示有数据的方向
+                    val avgBps = if (s.txTotalBytes > 0) s.txAvgBps else s.rxAvgBps
                     ListItem(
                         headlineContent = {
                             Text(
-                                "t=${formatElapsedMs(s.elapsedMs)} · TX ${formatBps(s.txInstantBps)} · RX ${
-                                    formatBps(
-                                        s.rxInstantBps
-                                    )
-                                }",
+                                "t=${formatElapsedMs(s.elapsedMs)} · avg ${formatBps(avgBps)}",
                                 fontFamily = FontFamily.Monospace
-                            )
-                        },
-                        supportingContent = {
-                            Text(
-                                "avg TX ${formatBps(s.txAvgBps)} · avg RX ${formatBps(s.rxAvgBps)}",
-                                fontFamily = FontFamily.Monospace,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                style = MaterialTheme.typography.bodySmall
                             )
                         }
                     )
@@ -234,7 +337,6 @@ fun SppSpeedTestSheet(
 @Composable
 private fun SpeedSummary(
     title: String,
-    instantBps: Double?,
     avgBps: Double?,
     totalBytes: Long,
     modifier: Modifier = Modifier
@@ -244,11 +346,7 @@ private fun SpeedSummary(
         supportingContent = {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
-                    "即时: ${instantBps?.let(::formatBps) ?: "--"}",
-                    fontFamily = FontFamily.Monospace
-                )
-                Text(
-                    "平均: ${avgBps?.let(::formatBps) ?: "--"}",
+                    "速率: ${avgBps?.let(::formatBps) ?: "--"}",
                     fontFamily = FontFamily.Monospace
                 )
                 Text(
@@ -261,33 +359,6 @@ private fun SpeedSummary(
     )
 }
 
-private fun formatBps(bps: Double): String {
-    val units = arrayOf("B/s", "KB/s", "MB/s", "GB/s")
-    var value = bps
-    var unitIndex = 0
-    while (value >= 1024 && unitIndex < units.lastIndex) {
-        value /= 1024
-        unitIndex++
-    }
-    return "%.2f %s".format(value, units[unitIndex])
-}
-
-private fun formatBytes(bytes: Long): String {
-    val units = arrayOf("B", "KB", "MB", "GB")
-    var value = bytes.toDouble()
-    var unitIndex = 0
-    while (value >= 1024 && unitIndex < units.lastIndex) {
-        value /= 1024
-        unitIndex++
-    }
-    return "%.2f %s".format(value, units[unitIndex])
-}
-
-private fun formatElapsedMs(ms: Long): String {
-    if (ms <= 0) return "0.0s"
-    val seconds = ms / 1000.0
-    return "%.1fs".format(seconds)
-}
 
 @Composable
 private fun SpeedDebug(session: SppSession) {

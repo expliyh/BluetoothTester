@@ -37,16 +37,16 @@ class SppViewModelTest {
         viewModel.updatePayloadSize(0)
 
         val session = viewModel.uiState.value.sessions[device.address]
-        assertEquals("payloadSize 低于边界时应被钳制为 1", 1, session?.payloadSize)
+        assertEquals("payloadSize 低于边界时应被钳制为 1", 1, session?.receiveBufferSize)
     }
 
     @Test
-    fun startSpeedTest_exceptionPath_withoutConnectionShouldReportError() = runTest {
+    fun toggleSpeedTest_exceptionPath_withoutConnectionShouldReportError() = runTest {
         val viewModel = SppViewModel(RuntimeEnvironment.getApplication())
         val device = SppDevice(name = "device-C", address = "AA:BB:CC:DD:EE:03")
         viewModel.select(device)
 
-        viewModel.startSpeedTest(testDurationMs = 1000L)
+        viewModel.toggleSpeedTest()
 
         val session = viewModel.uiState.value.sessions[device.address]
         assertNotNull("未连接触发测速时应写入 lastError", session?.lastError)

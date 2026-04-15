@@ -29,6 +29,10 @@ abstract class SocketLikeBluetoothClientManager(
     protected abstract val device: BluetoothDevice
     protected abstract fun createSocket(): BluetoothSocket?
 
+    /** 最近一次 connect() 的耗时（毫秒），仅在连接成功时有值 */
+    var lastConnectDurationMs: Long? = null
+        private set
+
     private var aclReceiver: BroadcastReceiver? = null
 
     /** 建立连接，初始化输入/输出流，并注册 ACL 广播辅助感知断开。 */
@@ -52,15 +56,18 @@ abstract class SocketLikeBluetoothClientManager(
                 return
             }
 
-            // 建立连接
+            // 建立连接（计时）
+            val startNs = System.nanoTime()
             tmp.connect()
+            val endNs = System.nanoTime()
+            lastConnectDurationMs = (endNs - startNs) / 1_000_000
             socket = tmp
             input = tmp.inputStream
             output = tmp.outputStream
             _connectionState.value = ConnectionState.Connected
         } catch (_: IOException) {
-            _connectionState.value = ConnectionState.Error
             disconnect()
+            _connectionState.value = ConnectionState.Error
         }
     }
 
