@@ -63,7 +63,7 @@ fun ServerSessionListScreen(
         }
 
         // 2. 活跃会话卡片
-        if (hasActive && sessionState != null) {
+        if (hasActive) {
             item(key = "active_session") {
                 ActiveSessionCard(
                     session = sessionState,

@@ -24,7 +24,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.ScrollableTabRow
+import androidx.compose.material3.PrimaryScrollableTabRow
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Tab
@@ -330,7 +330,7 @@ fun SppScreen(onBackClick: () -> Unit) {
                 .padding(inner)
         ) {
             // ── Tab Bar ──
-            ScrollableTabRow(
+            PrimaryScrollableTabRow(
                 selectedTabIndex = currentPage,
                 edgePadding = 8.dp
             ) {
