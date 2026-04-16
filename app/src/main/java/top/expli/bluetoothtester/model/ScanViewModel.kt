@@ -101,13 +101,22 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
 
     @RequiresPermission(Manifest.permission.BLUETOOTH_SCAN)
     fun startScan(mode: ScanMode) {
-        when (mode) {
-            ScanMode.BrOnly -> startClassicScan()
-            ScanMode.LeOnly -> startBleScan()
-            ScanMode.Dual -> {
-                startBleScan()
-                startClassicScan()
-            }
+        val needBle = mode == ScanMode.LeOnly || mode == ScanMode.Dual
+        val needClassic = mode == ScanMode.BrOnly || mode == ScanMode.Dual
+        val bleScanning = bleScanner.state.value is BleScanner.ScanState.Scanning
+        val classicScanning = classicScanner.state.value is ClassicScanner.ScanState.Scanning
+
+        // Stop scanners that are no longer needed in this mode
+        if (!needBle) stopBleScan()
+        if (!needClassic) stopClassicScan()
+
+        // Start/restart scanners that are needed
+        // Use clearResults=false to preserve existing results during mode switch
+        if (needBle && !bleScanning) {
+            bleScanner.startScan(clearResults = false)
+        }
+        if (needClassic && !classicScanning) {
+            classicScanner.startScan(clearResults = false)
         }
     }
 

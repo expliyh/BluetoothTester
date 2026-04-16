@@ -4,20 +4,27 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -51,6 +58,7 @@ fun DevicePickerSheet(
     showScanned: Boolean = true,
     deviceTypeFilter: Set<DeviceType>? = null,
     defaultScanMode: ScanMode = ScanMode.Dual,
+    isScanning: Boolean = false,
     onStartScan: ((ScanMode) -> Unit)? = null,
     onStopScan: (() -> Unit)? = null,
     onDismissRequest: () -> Unit,
@@ -65,15 +73,21 @@ fun DevicePickerSheet(
         }
     }
 
-    val filteredScanned = remember(scannedDevices, deviceTypeFilter) {
-        if (deviceTypeFilter != null) {
-            scannedDevices.filter { it.deviceType in deviceTypeFilter }
-        } else {
-            scannedDevices
+    var scanMode by remember { mutableStateOf(defaultScanMode) }
+    var namedOnly by remember { mutableStateOf(false) }
+
+    val filteredScanned = remember(scannedDevices, deviceTypeFilter, scanMode, namedOnly) {
+        val scanModeTypes = when (scanMode) {
+            ScanMode.BrOnly -> setOf(DeviceType.Classic, DeviceType.Dual)
+            ScanMode.LeOnly -> setOf(DeviceType.BLE, DeviceType.Dual)
+            ScanMode.Dual -> null // show all
+        }
+        scannedDevices.filter { device ->
+            (deviceTypeFilter == null || device.deviceType in deviceTypeFilter) &&
+                    (scanModeTypes == null || device.deviceType in scanModeTypes) &&
+                    (!namedOnly || !device.name.isNullOrBlank())
         }
     }
-
-    var scanMode by remember { mutableStateOf(defaultScanMode) }
 
     // State for Dual device transport selection dialog
     var pendingDualDevice by remember { mutableStateOf<Pair<String, String?>?>(null) }
@@ -131,7 +145,6 @@ fun DevicePickerSheet(
             // Trigger scan when switching to scanned tab or changing scan mode
             LaunchedEffect(selectedTab, scanMode) {
                 if (selectedTab == 1) {
-                    onStopScan?.invoke()
                     onStartScan?.invoke(scanMode)
                 }
             }
@@ -157,9 +170,13 @@ fun DevicePickerSheet(
                     }
                 )
                 1 -> {
-                    ScanModeSelector(
-                        selected = scanMode,
-                        onSelectionChange = { scanMode = it }
+                    ScanToolbar(
+                        scanMode = scanMode,
+                        onScanModeChange = { scanMode = it },
+                        namedOnly = namedOnly,
+                        onNamedOnlyChange = { namedOnly = it },
+                        isScanning = isScanning,
+                        onRescan = { onStartScan?.invoke(scanMode) }
                     )
                     ScannedDeviceList(
                         devices = filteredScanned,
@@ -185,12 +202,15 @@ fun DevicePickerSheet(
         } else if (showScanned) {
             // Single list: scanned only
             LaunchedEffect(scanMode) {
-                onStopScan?.invoke()
                 onStartScan?.invoke(scanMode)
             }
-            ScanModeSelector(
-                selected = scanMode,
-                onSelectionChange = { scanMode = it }
+            ScanToolbar(
+                scanMode = scanMode,
+                onScanModeChange = { scanMode = it },
+                namedOnly = namedOnly,
+                onNamedOnlyChange = { namedOnly = it },
+                isScanning = isScanning,
+                onRescan = { onStartScan?.invoke(scanMode) }
             )
             Text(
                 "扫描结果",
@@ -208,32 +228,50 @@ fun DevicePickerSheet(
 }
 
 @Composable
-private fun ScanModeSelector(
-    selected: ScanMode,
-    onSelectionChange: (ScanMode) -> Unit,
+private fun ScanToolbar(
+    scanMode: ScanMode,
+    onScanModeChange: (ScanMode) -> Unit,
+    namedOnly: Boolean,
+    onNamedOnlyChange: (Boolean) -> Unit,
+    isScanning: Boolean,
+    onRescan: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Row(
+    FlowRow(
         modifier = modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         FilterChip(
-            selected = selected == ScanMode.BrOnly,
-            onClick = { onSelectionChange(ScanMode.BrOnly) },
+            selected = scanMode == ScanMode.BrOnly,
+            onClick = { onScanModeChange(ScanMode.BrOnly) },
             label = { Text("BR Only") }
         )
-        Spacer(Modifier.width(8.dp))
         FilterChip(
-            selected = selected == ScanMode.LeOnly,
-            onClick = { onSelectionChange(ScanMode.LeOnly) },
+            selected = scanMode == ScanMode.LeOnly,
+            onClick = { onScanModeChange(ScanMode.LeOnly) },
             label = { Text("LE Only") }
         )
-        Spacer(Modifier.width(8.dp))
         FilterChip(
-            selected = selected == ScanMode.Dual,
-            onClick = { onSelectionChange(ScanMode.Dual) },
+            selected = scanMode == ScanMode.Dual,
+            onClick = { onScanModeChange(ScanMode.Dual) },
             label = { Text("Dual") }
         )
+        FilterChip(
+            selected = namedOnly,
+            onClick = { onNamedOnlyChange(!namedOnly) },
+            label = { Text("仅有名称") }
+        )
+        if (isScanning) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(24.dp).align(Alignment.CenterVertically),
+                strokeWidth = 2.dp
+            )
+        } else {
+            IconButton(onClick = onRescan, modifier = Modifier.size(32.dp)) {
+                Icon(Icons.Default.Refresh, contentDescription = "重新扫描")
+            }
+        }
     }
 }
 

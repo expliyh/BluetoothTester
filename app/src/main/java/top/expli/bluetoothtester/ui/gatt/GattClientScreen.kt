@@ -346,6 +346,8 @@ fun GattClientScreen(
             showScanned = true,
             deviceTypeFilter = setOf(DeviceType.BLE, DeviceType.Dual),
             defaultScanMode = ScanMode.LeOnly,
+            isScanning = scanUiState.bleScanState is top.expli.bluetoothtester.model.BleScanState.Scanning ||
+                    scanUiState.classicScanState is top.expli.bluetoothtester.model.ClassicScanState.Scanning,
             onStartScan = { mode ->
                 ensureBluetoothPermissions {
                     @SuppressWarnings("MissingPermission")

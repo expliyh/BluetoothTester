@@ -106,8 +106,13 @@ class BleScanner(private val context: Context) {
 
     // ─── Public API ───
 
+    fun clearDevices() {
+        deviceMap.clear()
+        _devices.value = emptyList()
+    }
+
     @RequiresPermission(Manifest.permission.BLUETOOTH_SCAN)
-    fun startScan(filter: BleScanFilter? = null) {
+    fun startScan(filter: BleScanFilter? = null, clearResults: Boolean = true) {
         val bleScanner = scanner
         if (adapter == null) {
             _state.value = ScanState.Error("BluetoothAdapter is null")
@@ -120,8 +125,10 @@ class BleScanner(private val context: Context) {
 
         // Reset state for new scan
         currentFilter = filter
-        deviceMap.clear()
-        _devices.value = emptyList()
+        if (clearResults) {
+            deviceMap.clear()
+            _devices.value = emptyList()
+        }
         flushJob?.cancel()
         flushJob = null
         _state.value = ScanState.Scanning

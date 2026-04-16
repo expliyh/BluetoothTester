@@ -297,6 +297,8 @@ fun ClientTabPage(
             showScanned = true,
             deviceTypeFilter = setOf(DeviceType.Classic, DeviceType.Dual),
             defaultScanMode = ScanMode.BrOnly,
+            isScanning = scanUiState.bleScanState is top.expli.bluetoothtester.model.BleScanState.Scanning ||
+                    scanUiState.classicScanState is top.expli.bluetoothtester.model.ClassicScanState.Scanning,
             onStartScan = { mode ->
                 ensureBluetoothPermissions {
                     @SuppressWarnings("MissingPermission")
