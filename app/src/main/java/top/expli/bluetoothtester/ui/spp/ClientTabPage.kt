@@ -109,7 +109,7 @@ fun ClientTabPage(
         }
     }
 
-    if (inDetail && selectedSession != null) {
+    if (inDetail) {
         // 确保 ViewModel 的 selectedKey 指向当前 client session，
         // 这样所有基于 selectedKey 的无参方法（toggleSpeedTest、sendOnce 等）都能正确工作
         LaunchedEffect(selectedClientKey) {

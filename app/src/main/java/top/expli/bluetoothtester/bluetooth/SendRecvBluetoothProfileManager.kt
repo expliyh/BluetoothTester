@@ -724,8 +724,14 @@ abstract class SendRecvBluetoothProfileManager(context: Context) :
 
         // Determine stop condition parameters
         val stopByBytes = config.stopCondition is StopCondition.ByBytes
-        val targetBytes = if (stopByBytes) (config.stopCondition as StopCondition.ByBytes).totalBytes else Long.MAX_VALUE
-        val durationMs = if (!stopByBytes) (config.stopCondition as StopCondition.ByDuration).durationMs else Long.MAX_VALUE
+        val targetBytes = when (val sc = config.stopCondition) {
+            is StopCondition.ByBytes -> sc.totalBytes
+            is StopCondition.ByDuration -> Long.MAX_VALUE
+        }
+        val durationMs = when (val sc = config.stopCondition) {
+            is StopCondition.ByDuration -> sc.durationMs
+            is StopCondition.ByBytes -> Long.MAX_VALUE
+        }
 
         // TX sender coroutine
         val sender = if (!config.txEnabled) null else launch(Dispatchers.IO) {
