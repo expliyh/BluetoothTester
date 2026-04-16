@@ -32,15 +32,11 @@ import kotlinx.coroutines.launch
 import top.expli.bluetoothtester.data.SettingsStore
 import top.expli.bluetoothtester.model.DeviceType
 import top.expli.bluetoothtester.model.ScanMode
-import top.expli.bluetoothtester.model.ScanViewModel
 import top.expli.bluetoothtester.model.SecurityMode
 import top.expli.bluetoothtester.model.SppConnectionState
 import top.expli.bluetoothtester.model.SppUiState
 import top.expli.bluetoothtester.model.SppViewModel
-import top.expli.bluetoothtester.ui.common.BondedDeviceItem
-import top.expli.bluetoothtester.ui.common.BondedDeviceLoadResult
 import top.expli.bluetoothtester.ui.common.DevicePickerSheet
-import top.expli.bluetoothtester.ui.common.loadBondedDeviceItems
 
 @SuppressLint("MissingPermission")
 @Composable
@@ -79,9 +75,6 @@ fun ClientTabPage(
     // Device picker state
     var showDevicePicker by remember { mutableStateOf(false) }
     var pickerForReconnect by remember { mutableStateOf(false) }
-    var pickerBondedDevices by remember { mutableStateOf<List<BondedDeviceItem>>(emptyList()) }
-    val scanViewModel: ScanViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
-    val scanUiState by scanViewModel.uiState.collectAsState()
 
     // Persist SecurityMode changes
     LaunchedEffect(securityMode) {
@@ -147,15 +140,8 @@ fun ClientTabPage(
             },
             onClearChat = { vm.clearChat() },
             onConnectFromBondedDevice = {
-                ensureBluetoothPermissions {
-                    val result = runCatching { loadBondedDeviceItems(context) }.getOrNull()
-                    pickerBondedDevices = when (result) {
-                        is BondedDeviceLoadResult.Success -> result.devices
-                        else -> emptyList()
-                    }
-                    pickerForReconnect = true
-                    showDevicePicker = true
-                }
+                pickerForReconnect = true
+                showDevicePicker = true
             },
             onStartPeriodicTest = { vm.startPeriodicTestSelected() },
             onStopPeriodicTest = { vm.stopPeriodicTestSelected() },
@@ -197,15 +183,8 @@ fun ClientTabPage(
                     }
                 },
                 onDiscoverDevices = {
-                    ensureBluetoothPermissions {
-                        val result = runCatching { loadBondedDeviceItems(context) }.getOrNull()
-                        pickerBondedDevices = when (result) {
-                            is BondedDeviceLoadResult.Success -> result.devices
-                            else -> emptyList()
-                        }
-                        pickerForReconnect = false
-                        showDevicePicker = true
-                    }
+                    pickerForReconnect = false
+                    showDevicePicker = true
                 },
                 connectEnabled = true,
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
@@ -291,32 +270,11 @@ fun ClientTabPage(
     // Device Picker (bonded + classic scan, filtered to Classic/Dual)
     if (showDevicePicker) {
         DevicePickerSheet(
-            bondedDevices = pickerBondedDevices,
-            scannedDevices = scanUiState.combinedDevices,
-            showBonded = true,
-            showScanned = true,
             deviceTypeFilter = setOf(DeviceType.Classic, DeviceType.Dual),
             defaultScanMode = ScanMode.BrOnly,
-            isScanning = scanUiState.bleScanState is top.expli.bluetoothtester.model.BleScanState.Scanning ||
-                    scanUiState.classicScanState is top.expli.bluetoothtester.model.ClassicScanState.Scanning,
-            onStartScan = { mode ->
-                ensureBluetoothPermissions {
-                    @SuppressWarnings("MissingPermission")
-                    scanViewModel.startScan(mode)
-                }
-            },
-            onStopScan = {
-                @SuppressWarnings("MissingPermission")
-                scanViewModel.stopAllScans()
-            },
-            onDismissRequest = {
-                @SuppressWarnings("MissingPermission")
-                scanViewModel.stopAllScans()
-                showDevicePicker = false
-            },
+            ensureBluetoothPermissions = ensureBluetoothPermissions,
+            onDismissRequest = { showDevicePicker = false },
             onSelect = { addr, pickedName, _ ->
-                @SuppressWarnings("MissingPermission")
-                scanViewModel.stopAllScans()
                 if (pickerForReconnect) {
                     val selected =
                         selectedClientKey?.let { latestState.sessions[it] }?.device
