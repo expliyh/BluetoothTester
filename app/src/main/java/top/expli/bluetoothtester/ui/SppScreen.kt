@@ -50,10 +50,6 @@ import kotlinx.coroutines.launch
 import top.expli.bluetoothtester.model.SppViewModel
 import top.expli.bluetoothtester.ui.permissions.BluetoothPermissions
 import top.expli.bluetoothtester.ui.permissions.openAppSettings
-import top.expli.bluetoothtester.ui.common.BondedDeviceItem
-import top.expli.bluetoothtester.ui.common.BondedDeviceLoadResult
-import top.expli.bluetoothtester.ui.common.DevicePickerSheet
-import top.expli.bluetoothtester.ui.common.loadBondedDeviceItems
 import top.expli.bluetoothtester.ui.spp.AddServerDialog
 import top.expli.bluetoothtester.ui.spp.ClientTabPage
 import top.expli.bluetoothtester.ui.spp.ServerTabPage
@@ -73,10 +69,7 @@ fun SppScreen(onBackClick: () -> Unit) {
     var showAddServerDialog by remember { mutableStateOf(false) }
     var showPermissionRationaleDialog by remember { mutableStateOf(false) }
     var showPermissionSettingsDialog by remember { mutableStateOf(false) }
-    var showBondedDevicePicker by remember { mutableStateOf(false) }
-    var bondedDevices by remember { mutableStateOf<List<BondedDeviceItem>>(emptyList()) }
     val pendingBluetoothAction = remember { AtomicReference<(() -> Unit)?>(null) }
-    val bondedDevicePickerOnSelect = remember { AtomicReference<((String, String?) -> Unit)?>(null) }
 
     // Delete confirmation state
     var deleteTabId by remember { mutableStateOf<String?>(null) }
@@ -150,34 +143,6 @@ fun SppScreen(onBackClick: () -> Unit) {
             showPermissionRationaleDialog = true
         } else {
             bluetoothPermissionLauncher.launch(BluetoothPermissions.required)
-        }
-    }
-
-    fun requestBondedDevicePick(onPicked: (String, String?) -> Unit) {
-        ensureBluetoothPermissions {
-            val result = runCatching { loadBondedDeviceItems(context) }.getOrElse {
-                scope.launch {
-                    snackbarHostState.showSnackbar("读取已绑定设备失败: ${it.message ?: it::class.java.simpleName}")
-                }
-                return@ensureBluetoothPermissions
-            }
-            when (result) {
-                is BondedDeviceLoadResult.Success -> {
-                    if (result.devices.isEmpty()) {
-                        scope.launch { snackbarHostState.showSnackbar("未找到已绑定设备，请先在系统蓝牙设置中配对") }
-                    } else {
-                        bondedDevices = result.devices
-                        bondedDevicePickerOnSelect.set(onPicked)
-                        showBondedDevicePicker = true
-                    }
-                }
-                BondedDeviceLoadResult.BluetoothDisabled -> scope.launch {
-                    snackbarHostState.showSnackbar("蓝牙未开启，请先开启蓝牙")
-                }
-                BondedDeviceLoadResult.BluetoothUnavailable -> scope.launch {
-                    snackbarHostState.showSnackbar("本机蓝牙不可用")
-                }
-            }
         }
     }
 
@@ -388,7 +353,6 @@ fun SppScreen(onBackClick: () -> Unit) {
                         state = state,
                         snackbarHostState = snackbarHostState,
                         ensureBluetoothPermissions = ::ensureBluetoothPermissions,
-                        requestBondedDevicePick = ::requestBondedDevicePick,
                         onScrollToLatest = { scrollFn -> scrollToLatest = scrollFn },
                         onIsInDetailChanged = { clientIsInDetail = it },
                         onBackHandler = { handler -> clientDetailBackHandler = handler }
@@ -497,21 +461,4 @@ fun SppScreen(onBackClick: () -> Unit) {
         )
     }
 
-    if (showBondedDevicePicker) {
-        DevicePickerSheet(
-            bondedDevices = bondedDevices,
-            showBonded = true,
-            showScanned = false,
-            onDismissRequest = {
-                @Suppress("ASSIGNED_VALUE_IS_NEVER_READ")
-                showBondedDevicePicker = false
-                bondedDevicePickerOnSelect.set(null)
-            },
-            onSelect = { addr, name, _ ->
-                @Suppress("ASSIGNED_VALUE_IS_NEVER_READ")
-                showBondedDevicePicker = false
-                bondedDevicePickerOnSelect.getAndSet(null)?.invoke(addr, name)
-            }
-        )
-    }
 }

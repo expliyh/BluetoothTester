@@ -49,7 +49,6 @@ fun ClientTabPage(
     state: SppUiState,
     snackbarHostState: SnackbarHostState,
     ensureBluetoothPermissions: (() -> Unit) -> Unit,
-    requestBondedDevicePick: ((String, String?) -> Unit) -> Unit,
     onScrollToLatest: (() -> Unit) -> Unit,
     onIsInDetailChanged: (Boolean) -> Unit,
     onBackHandler: ((() -> Unit)?) -> Unit = {},
@@ -77,8 +76,9 @@ fun ClientTabPage(
     val selectedSession = selectedClientKey?.let { state.sessions[it] }
     val inDetail = selectedClientKey != null && selectedSession != null
 
-    // Device picker state (replaces DeviceDiscoverySheet)
+    // Device picker state
     var showDevicePicker by remember { mutableStateOf(false) }
+    var pickerForReconnect by remember { mutableStateOf(false) }
     var pickerBondedDevices by remember { mutableStateOf<List<BondedDeviceItem>>(emptyList()) }
     val scanViewModel: ScanViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
     val scanUiState by scanViewModel.uiState.collectAsState()
@@ -147,17 +147,14 @@ fun ClientTabPage(
             },
             onClearChat = { vm.clearChat() },
             onConnectFromBondedDevice = {
-                requestBondedDevicePick { pickedAddr, pickedName ->
-                    val selected =
-                        selectedClientKey?.let { latestState.sessions[it] }?.device
-                            ?: return@requestBondedDevicePick
-                    val resolvedName =
-                        if (selected.name.isBlank() || selected.name == selected.address) (pickedName ?: pickedAddr) else selected.name
-                    val updated = selected.copy(name = resolvedName, address = pickedAddr)
-                    ensureBluetoothPermissions {
-                        vm.select(updated)
-                        vm.connect()
+                ensureBluetoothPermissions {
+                    val result = runCatching { loadBondedDeviceItems(context) }.getOrNull()
+                    pickerBondedDevices = when (result) {
+                        is BondedDeviceLoadResult.Success -> result.devices
+                        else -> emptyList()
                     }
+                    pickerForReconnect = true
+                    showDevicePicker = true
                 }
             },
             onStartPeriodicTest = { vm.startPeriodicTestSelected() },
@@ -199,11 +196,6 @@ fun ClientTabPage(
                         selectedClientKey = "client:$sessionId"
                     }
                 },
-                onPickBondedDevice = {
-                    requestBondedDevicePick { pickedAddr, _ ->
-                        vm.clientControlAddress.value = pickedAddr
-                    }
-                },
                 onDiscoverDevices = {
                     ensureBluetoothPermissions {
                         val result = runCatching { loadBondedDeviceItems(context) }.getOrNull()
@@ -211,6 +203,7 @@ fun ClientTabPage(
                             is BondedDeviceLoadResult.Success -> result.devices
                             else -> emptyList()
                         }
+                        pickerForReconnect = false
                         showDevicePicker = true
                     }
                 },
@@ -319,10 +312,24 @@ fun ClientTabPage(
                 scanViewModel.stopAllScans()
                 showDevicePicker = false
             },
-            onSelect = { addr, _, _ ->
+            onSelect = { addr, pickedName, _ ->
                 @SuppressWarnings("MissingPermission")
                 scanViewModel.stopAllScans()
-                vm.clientControlAddress.value = addr
+                if (pickerForReconnect) {
+                    val selected =
+                        selectedClientKey?.let { latestState.sessions[it] }?.device
+                    if (selected != null) {
+                        val resolvedName =
+                            if (selected.name.isBlank() || selected.name == selected.address) (pickedName ?: addr) else selected.name
+                        val updated = selected.copy(name = resolvedName, address = addr)
+                        ensureBluetoothPermissions {
+                            vm.select(updated)
+                            vm.connect()
+                        }
+                    }
+                } else {
+                    vm.clientControlAddress.value = addr
+                }
                 showDevicePicker = false
             }
         )
