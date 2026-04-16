@@ -71,7 +71,8 @@ data class ClassicDeviceResult(
     val name: String?,
     val majorDeviceClass: Int,
     val minorDeviceClass: Int,
-    val deviceType: DeviceType
+    val deviceType: DeviceType,
+    val rssi: Short? = null
 )
 
 // ─── 统一设备结果（合并 BLE 和经典扫描结果） ───

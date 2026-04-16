@@ -162,7 +162,7 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
                     address = classic.address,
                     name = classic.name,
                     deviceType = classic.deviceType,
-                    rssi = null,
+                    rssi = classic.rssi?.toInt(),
                     bleData = null,
                     classicData = classic
                 )

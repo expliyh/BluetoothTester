@@ -139,13 +139,16 @@ class ClassicScanner(private val context: Context) {
         val minorClass = btClass?.deviceClass ?: 0
 
         val deviceType = mapDeviceType(device.type)
+        val rssi = intent.getShortExtra(BluetoothDevice.EXTRA_RSSI, Short.MIN_VALUE)
+            .let { if (it == Short.MIN_VALUE) null else it }
 
         val result = ClassicDeviceResult(
             address = address,
             name = name,
             majorDeviceClass = majorClass,
             minorDeviceClass = minorClass,
-            deviceType = deviceType
+            deviceType = deviceType,
+            rssi = rssi
         )
 
         deviceMap[address] = result
