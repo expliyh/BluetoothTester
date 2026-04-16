@@ -66,6 +66,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
 import top.expli.bluetoothtester.model.DeviceType
+import top.expli.bluetoothtester.model.ScanMode
 import top.expli.bluetoothtester.model.GattCharacteristicInfo
 import top.expli.bluetoothtester.model.GattConnectionState
 import top.expli.bluetoothtester.model.GattClientViewModel
@@ -344,18 +345,25 @@ fun GattClientScreen(
             showBonded = true,
             showScanned = true,
             deviceTypeFilter = setOf(DeviceType.BLE, DeviceType.Dual),
-            onStartScan = {
+            defaultScanMode = ScanMode.LeOnly,
+            onStartScan = { mode ->
                 ensureBluetoothPermissions {
                     @SuppressWarnings("MissingPermission")
-                    scanViewModel.startBleScan()
+                    scanViewModel.startScan(mode)
                 }
             },
+            onStopScan = {
+                @SuppressWarnings("MissingPermission")
+                scanViewModel.stopAllScans()
+            },
             onDismissRequest = {
-                scanViewModel.stopBleScan()
+                @SuppressWarnings("MissingPermission")
+                scanViewModel.stopAllScans()
                 showDevicePicker = false
             },
-            onSelect = { address, name ->
-                scanViewModel.stopBleScan()
+            onSelect = { address, name, _ ->
+                @SuppressWarnings("MissingPermission")
+                scanViewModel.stopAllScans()
                 targetAddress = address
                 viewModel.setTarget(address, name ?: "")
                 showDevicePicker = false

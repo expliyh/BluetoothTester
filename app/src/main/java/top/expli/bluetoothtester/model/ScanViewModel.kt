@@ -99,6 +99,24 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
         classicScanner.stopScan()
     }
 
+    @RequiresPermission(Manifest.permission.BLUETOOTH_SCAN)
+    fun startScan(mode: ScanMode) {
+        when (mode) {
+            ScanMode.BrOnly -> startClassicScan()
+            ScanMode.LeOnly -> startBleScan()
+            ScanMode.Dual -> {
+                startBleScan()
+                startClassicScan()
+            }
+        }
+    }
+
+    @RequiresPermission(Manifest.permission.BLUETOOTH_SCAN)
+    fun stopAllScans() {
+        stopBleScan()
+        stopClassicScan()
+    }
+
     // ─── Combined devices merge logic ───
 
     @androidx.annotation.VisibleForTesting

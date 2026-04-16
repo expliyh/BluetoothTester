@@ -31,6 +31,7 @@ import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.launch
 import top.expli.bluetoothtester.data.SettingsStore
 import top.expli.bluetoothtester.model.DeviceType
+import top.expli.bluetoothtester.model.ScanMode
 import top.expli.bluetoothtester.model.ScanViewModel
 import top.expli.bluetoothtester.model.SecurityMode
 import top.expli.bluetoothtester.model.SppConnectionState
@@ -302,18 +303,25 @@ fun ClientTabPage(
             showBonded = true,
             showScanned = true,
             deviceTypeFilter = setOf(DeviceType.Classic, DeviceType.Dual),
-            onStartScan = {
+            defaultScanMode = ScanMode.BrOnly,
+            onStartScan = { mode ->
                 ensureBluetoothPermissions {
                     @SuppressWarnings("MissingPermission")
-                    scanViewModel.startClassicScan()
+                    scanViewModel.startScan(mode)
                 }
             },
+            onStopScan = {
+                @SuppressWarnings("MissingPermission")
+                scanViewModel.stopAllScans()
+            },
             onDismissRequest = {
-                scanViewModel.stopClassicScan()
+                @SuppressWarnings("MissingPermission")
+                scanViewModel.stopAllScans()
                 showDevicePicker = false
             },
-            onSelect = { addr, _ ->
-                scanViewModel.stopClassicScan()
+            onSelect = { addr, _, _ ->
+                @SuppressWarnings("MissingPermission")
+                scanViewModel.stopAllScans()
                 vm.clientControlAddress.value = addr
                 showDevicePicker = false
             }

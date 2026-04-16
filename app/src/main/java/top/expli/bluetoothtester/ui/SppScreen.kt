@@ -507,7 +507,7 @@ fun SppScreen(onBackClick: () -> Unit) {
                 showBondedDevicePicker = false
                 bondedDevicePickerOnSelect.set(null)
             },
-            onSelect = { addr, name ->
+            onSelect = { addr, name, _ ->
                 @Suppress("ASSIGNED_VALUE_IS_NEVER_READ")
                 showBondedDevicePicker = false
                 bondedDevicePickerOnSelect.getAndSet(null)?.invoke(addr, name)

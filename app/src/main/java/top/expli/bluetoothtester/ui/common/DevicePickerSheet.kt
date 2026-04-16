@@ -5,25 +5,31 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Tab
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -33,6 +39,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import top.expli.bluetoothtester.model.DeviceType
+import top.expli.bluetoothtester.model.ScanMode
 import top.expli.bluetoothtester.model.UnifiedDeviceResult
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -43,9 +50,11 @@ fun DevicePickerSheet(
     showBonded: Boolean = true,
     showScanned: Boolean = true,
     deviceTypeFilter: Set<DeviceType>? = null,
-    onStartScan: (() -> Unit)? = null,
+    defaultScanMode: ScanMode = ScanMode.Dual,
+    onStartScan: ((ScanMode) -> Unit)? = null,
+    onStopScan: (() -> Unit)? = null,
     onDismissRequest: () -> Unit,
-    onSelect: (address: String, name: String?) -> Unit,
+    onSelect: (address: String, name: String?, transport: DeviceType) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val filteredBonded = remember(bondedDevices, deviceTypeFilter) {
@@ -64,6 +73,53 @@ fun DevicePickerSheet(
         }
     }
 
+    var scanMode by remember { mutableStateOf(defaultScanMode) }
+
+    // State for Dual device transport selection dialog
+    var pendingDualDevice by remember { mutableStateOf<Pair<String, String?>?>(null) }
+
+    // Resolve transport for a selected device based on current scan mode
+    fun handleDeviceSelected(address: String, name: String?, deviceType: DeviceType) {
+        val transport = when (scanMode) {
+            ScanMode.BrOnly -> DeviceType.Classic
+            ScanMode.LeOnly -> DeviceType.BLE
+            ScanMode.Dual -> when (deviceType) {
+                DeviceType.Dual -> {
+                    // Need user to choose — show dialog
+                    pendingDualDevice = address to name
+                    return
+                }
+                else -> deviceType
+            }
+        }
+        onSelect(address, name, transport)
+        onDismissRequest()
+    }
+
+    // Dual transport selection dialog
+    if (pendingDualDevice != null) {
+        val (addr, devName) = pendingDualDevice!!
+        AlertDialog(
+            onDismissRequest = { pendingDualDevice = null },
+            title = { Text("选择连接方式") },
+            text = { Text("${devName ?: addr} 是双模设备，请选择连接方式：") },
+            confirmButton = {
+                TextButton(onClick = {
+                    pendingDualDevice = null
+                    onSelect(addr, devName, DeviceType.BLE)
+                    onDismissRequest()
+                }) { Text("BLE") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    pendingDualDevice = null
+                    onSelect(addr, devName, DeviceType.Classic)
+                    onDismissRequest()
+                }) { Text("Classic") }
+            }
+        )
+    }
+
     ModalBottomSheet(
         onDismissRequest = onDismissRequest,
         modifier = modifier
@@ -72,10 +128,11 @@ fun DevicePickerSheet(
             // Dual-tab mode
             var selectedTab by remember { mutableIntStateOf(0) }
 
-            // Trigger scan when switching to scanned tab
-            LaunchedEffect(selectedTab) {
+            // Trigger scan when switching to scanned tab or changing scan mode
+            LaunchedEffect(selectedTab, scanMode) {
                 if (selectedTab == 1) {
-                    onStartScan?.invoke()
+                    onStopScan?.invoke()
+                    onStartScan?.invoke(scanMode)
                 }
             }
 
@@ -95,18 +152,22 @@ fun DevicePickerSheet(
             when (selectedTab) {
                 0 -> BondedDeviceList(
                     devices = filteredBonded,
-                    onSelect = { address, name ->
-                        onSelect(address, name)
-                        onDismissRequest()
+                    onSelect = { address, name, deviceType ->
+                        handleDeviceSelected(address, name, deviceType)
                     }
                 )
-                1 -> ScannedDeviceList(
-                    devices = filteredScanned,
-                    onSelect = { address, name ->
-                        onSelect(address, name)
-                        onDismissRequest()
-                    }
-                )
+                1 -> {
+                    ScanModeSelector(
+                        selected = scanMode,
+                        onSelectionChange = { scanMode = it }
+                    )
+                    ScannedDeviceList(
+                        devices = filteredScanned,
+                        onSelect = { address, name, deviceType ->
+                            handleDeviceSelected(address, name, deviceType)
+                        }
+                    )
+                }
             }
         } else if (showBonded) {
             // Single list: bonded only
@@ -117,16 +178,20 @@ fun DevicePickerSheet(
             )
             BondedDeviceList(
                 devices = filteredBonded,
-                onSelect = { address, name ->
-                    onSelect(address, name)
-                    onDismissRequest()
+                onSelect = { address, name, deviceType ->
+                    handleDeviceSelected(address, name, deviceType)
                 }
             )
         } else if (showScanned) {
             // Single list: scanned only
-            LaunchedEffect(Unit) {
-                onStartScan?.invoke()
+            LaunchedEffect(scanMode) {
+                onStopScan?.invoke()
+                onStartScan?.invoke(scanMode)
             }
+            ScanModeSelector(
+                selected = scanMode,
+                onSelectionChange = { scanMode = it }
+            )
             Text(
                 "扫描结果",
                 style = MaterialTheme.typography.titleMedium,
@@ -134,9 +199,8 @@ fun DevicePickerSheet(
             )
             ScannedDeviceList(
                 devices = filteredScanned,
-                onSelect = { address, name ->
-                    onSelect(address, name)
-                    onDismissRequest()
+                onSelect = { address, name, deviceType ->
+                    handleDeviceSelected(address, name, deviceType)
                 }
             )
         }
@@ -144,9 +208,39 @@ fun DevicePickerSheet(
 }
 
 @Composable
+private fun ScanModeSelector(
+    selected: ScanMode,
+    onSelectionChange: (ScanMode) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        FilterChip(
+            selected = selected == ScanMode.BrOnly,
+            onClick = { onSelectionChange(ScanMode.BrOnly) },
+            label = { Text("BR Only") }
+        )
+        Spacer(Modifier.width(8.dp))
+        FilterChip(
+            selected = selected == ScanMode.LeOnly,
+            onClick = { onSelectionChange(ScanMode.LeOnly) },
+            label = { Text("LE Only") }
+        )
+        Spacer(Modifier.width(8.dp))
+        FilterChip(
+            selected = selected == ScanMode.Dual,
+            onClick = { onSelectionChange(ScanMode.Dual) },
+            label = { Text("Dual") }
+        )
+    }
+}
+
+@Composable
 private fun BondedDeviceList(
     devices: List<BondedDeviceItem>,
-    onSelect: (address: String, name: String?) -> Unit
+    onSelect: (address: String, name: String?, deviceType: DeviceType) -> Unit
 ) {
     if (devices.isEmpty()) {
         Text(
@@ -174,7 +268,7 @@ private fun BondedDeviceList(
                         Text(dev.address, fontFamily = FontFamily.Monospace)
                     },
                     modifier = Modifier.clickable {
-                        onSelect(dev.address, dev.name.ifBlank { null })
+                        onSelect(dev.address, dev.name.ifBlank { null }, dev.deviceType)
                     }
                 )
             }
@@ -185,7 +279,7 @@ private fun BondedDeviceList(
 @Composable
 private fun ScannedDeviceList(
     devices: List<UnifiedDeviceResult>,
-    onSelect: (address: String, name: String?) -> Unit
+    onSelect: (address: String, name: String?, deviceType: DeviceType) -> Unit
 ) {
     if (devices.isEmpty()) {
         Text(
@@ -208,7 +302,7 @@ private fun ScannedDeviceList(
                 ScannedDeviceItem(
                     device = device,
                     onClick = {
-                        onSelect(device.address, device.name)
+                        onSelect(device.address, device.name, device.deviceType)
                     }
                 )
             }

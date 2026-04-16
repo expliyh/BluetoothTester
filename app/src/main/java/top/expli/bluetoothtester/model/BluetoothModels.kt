@@ -9,6 +9,8 @@ import kotlinx.serialization.json.JsonElement
 @Serializable
 enum class DeviceType { Classic, BLE, Dual }
 
+enum class ScanMode { BrOnly, LeOnly, Dual }
+
 // ─── BLE 扫描结果 ───
 
 @Serializable
