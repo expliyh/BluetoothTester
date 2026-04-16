@@ -1,53 +1,112 @@
 package top.expli.bluetoothtester.ui.common
 
+import android.annotation.SuppressLint
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Tab
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import top.expli.bluetoothtester.model.BleScanState
+import top.expli.bluetoothtester.model.ClassicScanState
 import top.expli.bluetoothtester.model.DeviceType
+import top.expli.bluetoothtester.model.ScanMode
+import top.expli.bluetoothtester.model.ScanViewModel
 import top.expli.bluetoothtester.model.UnifiedDeviceResult
+import top.expli.bluetoothtester.ui.permissions.BluetoothPermissions
 
+private enum class ScanSortOrder(val label: String) {
+    RssiDesc("信号强度↓"),
+    RssiAsc("信号强度↑"),
+    NameAsc("名称 A→Z"),
+    NameDesc("名称 Z→A"),
+}
+
+@SuppressLint("MissingPermission")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DevicePickerSheet(
-    bondedDevices: List<BondedDeviceItem> = emptyList(),
-    scannedDevices: List<UnifiedDeviceResult> = emptyList(),
-    showBonded: Boolean = true,
-    showScanned: Boolean = true,
+    defaultScanMode: ScanMode = ScanMode.Dual,
     deviceTypeFilter: Set<DeviceType>? = null,
-    onStartScan: (() -> Unit)? = null,
+    ensureBluetoothPermissions: (() -> Unit) -> Unit,
     onDismissRequest: () -> Unit,
-    onSelect: (address: String, name: String?) -> Unit,
+    onSelect: (address: String, name: String?, transport: DeviceType) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+    val scanViewModel: ScanViewModel = viewModel()
+    val scanUiState by scanViewModel.uiState.collectAsState()
+
+    // Reload bonded devices whenever permission state changes (e.g. user grants
+    // BLUETOOTH_CONNECT from the scan tab after the sheet was already open).
+    val hasPermission = BluetoothPermissions.hasAll(context)
+    var bondedDevices by remember { mutableStateOf<List<BondedDeviceItem>>(emptyList()) }
+    LaunchedEffect(hasPermission) {
+        val result = runCatching { loadBondedDeviceItems(context) }.getOrNull()
+        bondedDevices = when (result) {
+            is BondedDeviceLoadResult.Success -> result.devices
+            else -> emptyList()
+        }
+    }
+
+    // Stop scans when sheet is dismissed/disposed
+    DisposableEffect(Unit) {
+        onDispose {
+            scanViewModel.stopAllScans()
+        }
+    }
+
+    val scannedDevices = scanUiState.combinedDevices
+    val isScanning = scanUiState.bleScanState is BleScanState.Scanning ||
+            scanUiState.classicScanState is ClassicScanState.Scanning
+
     val filteredBonded = remember(bondedDevices, deviceTypeFilter) {
         if (deviceTypeFilter != null) {
             bondedDevices.filter { it.deviceType in deviceTypeFilter }
@@ -56,89 +115,229 @@ fun DevicePickerSheet(
         }
     }
 
-    val filteredScanned = remember(scannedDevices, deviceTypeFilter) {
-        if (deviceTypeFilter != null) {
-            scannedDevices.filter { it.deviceType in deviceTypeFilter }
-        } else {
-            scannedDevices
+    var scanMode by remember { mutableStateOf(defaultScanMode) }
+    var namedOnly by remember { mutableStateOf(false) }
+    var sortOrder by remember { mutableStateOf(ScanSortOrder.RssiDesc) }
+
+    val filteredScanned = remember(scannedDevices, deviceTypeFilter, scanMode, namedOnly, sortOrder) {
+        val scanModeTypes = when (scanMode) {
+            ScanMode.BrOnly -> setOf(DeviceType.Classic, DeviceType.Dual)
+            ScanMode.LeOnly -> setOf(DeviceType.BLE, DeviceType.Dual)
+            ScanMode.Dual -> null // show all
         }
+        scannedDevices.filter { device ->
+            (deviceTypeFilter == null || device.deviceType in deviceTypeFilter) &&
+                    (scanModeTypes == null || device.deviceType in scanModeTypes) &&
+                    (!namedOnly || !device.name.isNullOrBlank())
+        }.let { list ->
+            when (sortOrder) {
+                ScanSortOrder.RssiDesc -> list.sortedByDescending { it.rssi ?: Int.MIN_VALUE }
+                ScanSortOrder.RssiAsc -> list.sortedBy { it.rssi ?: Int.MIN_VALUE }
+                ScanSortOrder.NameAsc -> list.sortedBy { (it.name ?: it.address).lowercase() }
+                ScanSortOrder.NameDesc -> list.sortedByDescending { (it.name ?: it.address).lowercase() }
+            }
+        }
+    }
+
+    // State for Dual device transport selection dialog
+    var pendingDualDevice by remember { mutableStateOf<Pair<String, String?>?>(null) }
+
+    // Resolve transport for a selected device based on current scan mode
+    fun handleDeviceSelected(address: String, name: String?, deviceType: DeviceType) {
+        val transport = when (scanMode) {
+            ScanMode.BrOnly -> DeviceType.Classic
+            ScanMode.LeOnly -> DeviceType.BLE
+            ScanMode.Dual -> when (deviceType) {
+                DeviceType.Dual -> {
+                    // Need user to choose — show dialog
+                    pendingDualDevice = address to name
+                    return
+                }
+                else -> deviceType
+            }
+        }
+        onSelect(address, name, transport)
+        onDismissRequest()
+    }
+
+    // Dual transport selection dialog
+    if (pendingDualDevice != null) {
+        val (addr, devName) = pendingDualDevice!!
+        AlertDialog(
+            onDismissRequest = { pendingDualDevice = null },
+            title = { Text("选择连接方式") },
+            text = { Text("${devName ?: addr} 是双模设备，请选择连接方式：") },
+            confirmButton = {
+                TextButton(onClick = {
+                    pendingDualDevice = null
+                    onSelect(addr, devName, DeviceType.BLE)
+                    onDismissRequest()
+                }) { Text("BLE") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    pendingDualDevice = null
+                    onSelect(addr, devName, DeviceType.Classic)
+                    onDismissRequest()
+                }) { Text("Classic") }
+            }
+        )
     }
 
     ModalBottomSheet(
         onDismissRequest = onDismissRequest,
         modifier = modifier
     ) {
-        if (showBonded && showScanned) {
-            // Dual-tab mode
-            var selectedTab by remember { mutableIntStateOf(0) }
+        var selectedTab by remember { mutableIntStateOf(0) }
 
-            // Trigger scan when switching to scanned tab
-            LaunchedEffect(selectedTab) {
-                if (selectedTab == 1) {
-                    onStartScan?.invoke()
+        // Request permissions up-front so the bonded tab can load.
+        LaunchedEffect(selectedTab) {
+            if (selectedTab == 0 && !hasPermission) {
+                ensureBluetoothPermissions { /* permission granted — recomposition will reload bonded list */ }
+            }
+        }
+
+        // Clear stale results and start scanning when the user enters the
+        // scan tab.  When only the scan-mode filter changes within the tab,
+        // preserve existing results so devices already discovered under the
+        // previous mode are not lost.
+        var scanTabEntered by remember { mutableStateOf(false) }
+        LaunchedEffect(selectedTab, scanMode) {
+            if (selectedTab == 1) {
+                val clear = !scanTabEntered
+                scanTabEntered = true
+                ensureBluetoothPermissions {
+                    scanViewModel.startScan(scanMode, clearResults = clear)
                 }
             }
+        }
 
-            PrimaryTabRow(selectedTabIndex = selectedTab) {
-                Tab(
-                    selected = selectedTab == 0,
-                    onClick = { selectedTab = 0 },
-                    text = { Text("已配对设备") }
-                )
-                Tab(
-                    selected = selectedTab == 1,
-                    onClick = { selectedTab = 1 },
-                    text = { Text("扫描结果") }
-                )
-            }
-
-            when (selectedTab) {
-                0 -> BondedDeviceList(
-                    devices = filteredBonded,
-                    onSelect = { address, name ->
-                        onSelect(address, name)
-                        onDismissRequest()
-                    }
-                )
-                1 -> ScannedDeviceList(
-                    devices = filteredScanned,
-                    onSelect = { address, name ->
-                        onSelect(address, name)
-                        onDismissRequest()
-                    }
-                )
-            }
-        } else if (showBonded) {
-            // Single list: bonded only
-            Text(
-                "选择已绑定设备",
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+        PrimaryTabRow(selectedTabIndex = selectedTab) {
+            Tab(
+                selected = selectedTab == 0,
+                onClick = { selectedTab = 0 },
+                text = { Text("已配对设备") }
             )
-            BondedDeviceList(
+            Tab(
+                selected = selectedTab == 1,
+                onClick = { selectedTab = 1 },
+                text = { Text("扫描结果") }
+            )
+        }
+
+        when (selectedTab) {
+            0 -> BondedDeviceList(
                 devices = filteredBonded,
-                onSelect = { address, name ->
-                    onSelect(address, name)
-                    onDismissRequest()
+                onSelect = { address, name, deviceType ->
+                    handleDeviceSelected(address, name, deviceType)
                 }
             )
-        } else if (showScanned) {
-            // Single list: scanned only
-            LaunchedEffect(Unit) {
-                onStartScan?.invoke()
+            1 -> {
+                ScanToolbar(
+                    scanMode = scanMode,
+                    onScanModeChange = { scanMode = it },
+                    namedOnly = namedOnly,
+                    onNamedOnlyChange = { namedOnly = it },
+                    sortOrder = sortOrder,
+                    onSortOrderChange = { sortOrder = it },
+                    isScanning = isScanning,
+                    onRescan = {
+                        ensureBluetoothPermissions {
+                            scanViewModel.stopAllScans()
+                            scanViewModel.startScan(scanMode, clearResults = true)
+                        }
+                    }
+                )
+                ScannedDeviceList(
+                    devices = filteredScanned,
+                    sortOrder = sortOrder,
+                    onSelect = { address, name, deviceType ->
+                        handleDeviceSelected(address, name, deviceType)
+                    }
+                )
             }
-            Text(
-                "扫描结果",
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+        }
+    }
+}
+
+@Composable
+private fun ScanToolbar(
+    scanMode: ScanMode,
+    onScanModeChange: (ScanMode) -> Unit,
+    namedOnly: Boolean,
+    onNamedOnlyChange: (Boolean) -> Unit,
+    sortOrder: ScanSortOrder,
+    onSortOrderChange: (ScanSortOrder) -> Unit,
+    isScanning: Boolean,
+    onRescan: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var showSortMenu by remember { mutableStateOf(false) }
+
+    Column(modifier = modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+        // Row 1: scan mode + named-only filter
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            FilterChip(
+                selected = scanMode == ScanMode.BrOnly,
+                onClick = { onScanModeChange(ScanMode.BrOnly) },
+                label = { Text("BR Only") }
             )
-            ScannedDeviceList(
-                devices = filteredScanned,
-                onSelect = { address, name ->
-                    onSelect(address, name)
-                    onDismissRequest()
+            FilterChip(
+                selected = scanMode == ScanMode.LeOnly,
+                onClick = { onScanModeChange(ScanMode.LeOnly) },
+                label = { Text("LE Only") }
+            )
+            FilterChip(
+                selected = scanMode == ScanMode.Dual,
+                onClick = { onScanModeChange(ScanMode.Dual) },
+                label = { Text("Dual") }
+            )
+            FilterChip(
+                selected = namedOnly,
+                onClick = { onNamedOnlyChange(!namedOnly) },
+                label = { Text("仅有名称") }
+            )
+        }
+        // Row 2: sort + scan/loading button on the right
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box {
+                FilterChip(
+                    selected = true,
+                    onClick = { showSortMenu = true },
+                    label = { Text(sortOrder.label) }
+                )
+                DropdownMenu(
+                    expanded = showSortMenu,
+                    onDismissRequest = { showSortMenu = false }
+                ) {
+                    ScanSortOrder.entries.forEach { option ->
+                        DropdownMenuItem(
+                            text = { Text(option.label) },
+                            onClick = {
+                                onSortOrderChange(option)
+                                showSortMenu = false
+                            }
+                        )
+                    }
                 }
-            )
+            }
+            Spacer(modifier = Modifier.weight(1f))
+            if (isScanning) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(24.dp),
+                    strokeWidth = 2.dp
+                )
+            } else {
+                IconButton(onClick = onRescan, modifier = Modifier.size(32.dp)) {
+                    Icon(Icons.Default.Refresh, contentDescription = "重新扫描")
+                }
+            }
         }
     }
 }
@@ -146,7 +345,7 @@ fun DevicePickerSheet(
 @Composable
 private fun BondedDeviceList(
     devices: List<BondedDeviceItem>,
-    onSelect: (address: String, name: String?) -> Unit
+    onSelect: (address: String, name: String?, deviceType: DeviceType) -> Unit
 ) {
     if (devices.isEmpty()) {
         Text(
@@ -174,7 +373,7 @@ private fun BondedDeviceList(
                         Text(dev.address, fontFamily = FontFamily.Monospace)
                     },
                     modifier = Modifier.clickable {
-                        onSelect(dev.address, dev.name.ifBlank { null })
+                        onSelect(dev.address, dev.name.ifBlank { null }, dev.deviceType)
                     }
                 )
             }
@@ -185,8 +384,14 @@ private fun BondedDeviceList(
 @Composable
 private fun ScannedDeviceList(
     devices: List<UnifiedDeviceResult>,
-    onSelect: (address: String, name: String?) -> Unit
+    sortOrder: ScanSortOrder,
+    onSelect: (address: String, name: String?, deviceType: DeviceType) -> Unit
 ) {
+    val listState = rememberLazyListState()
+    LaunchedEffect(sortOrder) {
+        listState.scrollToItem(0)
+    }
+
     if (devices.isEmpty()) {
         Text(
             "暂无扫描结果",
@@ -196,6 +401,7 @@ private fun ScannedDeviceList(
         )
     } else {
         LazyColumn(
+            state = listState,
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.heightIn(max = 520.dp)
@@ -208,7 +414,7 @@ private fun ScannedDeviceList(
                 ScannedDeviceItem(
                     device = device,
                     onClick = {
-                        onSelect(device.address, device.name)
+                        onSelect(device.address, device.name, device.deviceType)
                     }
                 )
             }
@@ -249,13 +455,26 @@ private fun ScannedDeviceItem(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                Text(
-                    text = device.address,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontFamily = FontFamily.Monospace
-                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = device.address,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontFamily = FontFamily.Monospace
+                    )
+                    device.rssi?.let { rssi ->
+                        Text(
+                            text = "${rssi} dBm",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
             }
+            Spacer(modifier = Modifier.width(8.dp))
             DeviceTypeChip(deviceType = device.deviceType)
         }
     }

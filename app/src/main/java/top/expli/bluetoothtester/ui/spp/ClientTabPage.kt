@@ -31,15 +31,12 @@ import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.launch
 import top.expli.bluetoothtester.data.SettingsStore
 import top.expli.bluetoothtester.model.DeviceType
-import top.expli.bluetoothtester.model.ScanViewModel
+import top.expli.bluetoothtester.model.ScanMode
 import top.expli.bluetoothtester.model.SecurityMode
 import top.expli.bluetoothtester.model.SppConnectionState
 import top.expli.bluetoothtester.model.SppUiState
 import top.expli.bluetoothtester.model.SppViewModel
-import top.expli.bluetoothtester.ui.common.BondedDeviceItem
-import top.expli.bluetoothtester.ui.common.BondedDeviceLoadResult
 import top.expli.bluetoothtester.ui.common.DevicePickerSheet
-import top.expli.bluetoothtester.ui.common.loadBondedDeviceItems
 
 @SuppressLint("MissingPermission")
 @Composable
@@ -48,7 +45,6 @@ fun ClientTabPage(
     state: SppUiState,
     snackbarHostState: SnackbarHostState,
     ensureBluetoothPermissions: (() -> Unit) -> Unit,
-    requestBondedDevicePick: ((String, String?) -> Unit) -> Unit,
     onScrollToLatest: (() -> Unit) -> Unit,
     onIsInDetailChanged: (Boolean) -> Unit,
     onBackHandler: ((() -> Unit)?) -> Unit = {},
@@ -76,11 +72,9 @@ fun ClientTabPage(
     val selectedSession = selectedClientKey?.let { state.sessions[it] }
     val inDetail = selectedClientKey != null && selectedSession != null
 
-    // Device picker state (replaces DeviceDiscoverySheet)
+    // Device picker state
     var showDevicePicker by remember { mutableStateOf(false) }
-    var pickerBondedDevices by remember { mutableStateOf<List<BondedDeviceItem>>(emptyList()) }
-    val scanViewModel: ScanViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
-    val scanUiState by scanViewModel.uiState.collectAsState()
+    var pickerForReconnect by remember { mutableStateOf(false) }
 
     // Persist SecurityMode changes
     LaunchedEffect(securityMode) {
@@ -146,18 +140,8 @@ fun ClientTabPage(
             },
             onClearChat = { vm.clearChat() },
             onConnectFromBondedDevice = {
-                requestBondedDevicePick { pickedAddr, pickedName ->
-                    val selected =
-                        selectedClientKey?.let { latestState.sessions[it] }?.device
-                            ?: return@requestBondedDevicePick
-                    val resolvedName =
-                        if (selected.name.isBlank() || selected.name == selected.address) (pickedName ?: pickedAddr) else selected.name
-                    val updated = selected.copy(name = resolvedName, address = pickedAddr)
-                    ensureBluetoothPermissions {
-                        vm.select(updated)
-                        vm.connect()
-                    }
-                }
+                pickerForReconnect = true
+                showDevicePicker = true
             },
             onStartPeriodicTest = { vm.startPeriodicTestSelected() },
             onStopPeriodicTest = { vm.stopPeriodicTestSelected() },
@@ -198,20 +182,9 @@ fun ClientTabPage(
                         selectedClientKey = "client:$sessionId"
                     }
                 },
-                onPickBondedDevice = {
-                    requestBondedDevicePick { pickedAddr, _ ->
-                        vm.clientControlAddress.value = pickedAddr
-                    }
-                },
                 onDiscoverDevices = {
-                    ensureBluetoothPermissions {
-                        val result = runCatching { loadBondedDeviceItems(context) }.getOrNull()
-                        pickerBondedDevices = when (result) {
-                            is BondedDeviceLoadResult.Success -> result.devices
-                            else -> emptyList()
-                        }
-                        showDevicePicker = true
-                    }
+                    pickerForReconnect = false
+                    showDevicePicker = true
                 },
                 connectEnabled = true,
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
@@ -297,24 +270,26 @@ fun ClientTabPage(
     // Device Picker (bonded + classic scan, filtered to Classic/Dual)
     if (showDevicePicker) {
         DevicePickerSheet(
-            bondedDevices = pickerBondedDevices,
-            scannedDevices = scanUiState.combinedDevices,
-            showBonded = true,
-            showScanned = true,
             deviceTypeFilter = setOf(DeviceType.Classic, DeviceType.Dual),
-            onStartScan = {
-                ensureBluetoothPermissions {
-                    @SuppressWarnings("MissingPermission")
-                    scanViewModel.startClassicScan()
+            defaultScanMode = ScanMode.BrOnly,
+            ensureBluetoothPermissions = ensureBluetoothPermissions,
+            onDismissRequest = { showDevicePicker = false },
+            onSelect = { addr, pickedName, _ ->
+                if (pickerForReconnect) {
+                    val selected =
+                        selectedClientKey?.let { latestState.sessions[it] }?.device
+                    if (selected != null) {
+                        val resolvedName =
+                            if (selected.name.isBlank() || selected.name == selected.address) (pickedName ?: addr) else selected.name
+                        val updated = selected.copy(name = resolvedName, address = addr)
+                        ensureBluetoothPermissions {
+                            vm.select(updated)
+                            vm.connect()
+                        }
+                    }
+                } else {
+                    vm.clientControlAddress.value = addr
                 }
-            },
-            onDismissRequest = {
-                scanViewModel.stopClassicScan()
-                showDevicePicker = false
-            },
-            onSelect = { addr, _ ->
-                scanViewModel.stopClassicScan()
-                vm.clientControlAddress.value = addr
                 showDevicePicker = false
             }
         )

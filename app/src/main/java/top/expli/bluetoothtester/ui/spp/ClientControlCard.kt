@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.BluetoothSearching
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
@@ -34,7 +33,6 @@ fun ClientControlCard(
     securityMode: SecurityMode,
     onSecurityModeChange: (SecurityMode) -> Unit,
     onConnect: () -> Unit,
-    onPickBondedDevice: () -> Unit,
     onDiscoverDevices: () -> Unit,
     connectEnabled: Boolean,
     modifier: Modifier = Modifier
@@ -51,13 +49,8 @@ fun ClientControlCard(
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
                 trailingIcon = {
-                    Row {
-                        IconButton(onClick = onPickBondedDevice) {
-                            Icon(Icons.AutoMirrored.Filled.BluetoothSearching, "从已绑定设备选择")
-                        }
-                        IconButton(onClick = onDiscoverDevices) {
-                            Icon(Icons.Default.Search, "扫描发现设备")
-                        }
+                    IconButton(onClick = onDiscoverDevices) {
+                        Icon(Icons.AutoMirrored.Filled.BluetoothSearching, "选择设备")
                     }
                 }
             )

@@ -23,7 +23,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.BluetoothSearching
-import androidx.compose.material.icons.filled.Contacts
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.AlertDialog
@@ -66,16 +65,13 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
 import top.expli.bluetoothtester.model.DeviceType
+import top.expli.bluetoothtester.model.ScanMode
 import top.expli.bluetoothtester.model.GattCharacteristicInfo
 import top.expli.bluetoothtester.model.GattConnectionState
 import top.expli.bluetoothtester.model.GattClientViewModel
 import top.expli.bluetoothtester.model.GattLogEntry
 import top.expli.bluetoothtester.model.GattServiceInfo
-import top.expli.bluetoothtester.model.ScanViewModel
-import top.expli.bluetoothtester.ui.common.BondedDeviceItem
-import top.expli.bluetoothtester.ui.common.BondedDeviceLoadResult
 import top.expli.bluetoothtester.ui.common.DevicePickerSheet
-import top.expli.bluetoothtester.ui.common.loadBondedDeviceItems
 import top.expli.bluetoothtester.ui.permissions.BluetoothPermissions
 import top.expli.bluetoothtester.ui.permissions.openAppSettings
 import java.util.concurrent.atomic.AtomicReference
@@ -90,8 +86,6 @@ fun GattClientScreen(
     viewModel: GattClientViewModel = viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val scanViewModel: ScanViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
-    val scanUiState by scanViewModel.uiState.collectAsState()
     var targetAddress by rememberSaveable { mutableStateOf(initialAddress) }
     var mtuInput by rememberSaveable { mutableStateOf("512") }
 
@@ -102,7 +96,6 @@ fun GattClientScreen(
 
     // ─── Device picker state ───
     var showDevicePicker by remember { mutableStateOf(false) }
-    var bondedDevices by remember { mutableStateOf<List<BondedDeviceItem>>(emptyList()) }
 
     // ─── Permission state ───
     var showPermissionRationaleDialog by remember { mutableStateOf(false) }
@@ -201,28 +194,7 @@ fun GattClientScreen(
                             viewModel.disconnect()
                         },
                         onPickDevice = {
-                            ensureBluetoothPermissions {
-                                val result = runCatching { loadBondedDeviceItems(context) }.getOrElse {
-                                    scope.launch {
-                                        snackbarHostState.showSnackbar(
-                                            "读取已绑定设备失败: ${it.message ?: it::class.java.simpleName}"
-                                        )
-                                    }
-                                    return@ensureBluetoothPermissions
-                                }
-                                when (result) {
-                                    is BondedDeviceLoadResult.Success -> {
-                                        bondedDevices = result.devices
-                                        showDevicePicker = true
-                                    }
-                                    BondedDeviceLoadResult.BluetoothDisabled -> scope.launch {
-                                        snackbarHostState.showSnackbar("蓝牙未开启，请先开启蓝牙")
-                                    }
-                                    BondedDeviceLoadResult.BluetoothUnavailable -> scope.launch {
-                                        snackbarHostState.showSnackbar("本机蓝牙不可用")
-                                    }
-                                }
-                            }
+                            showDevicePicker = true
                         }
                     )
                 }
@@ -339,23 +311,11 @@ fun GattClientScreen(
     // ─── Device Picker Sheet ───
     if (showDevicePicker) {
         DevicePickerSheet(
-            bondedDevices = bondedDevices,
-            scannedDevices = scanUiState.combinedDevices,
-            showBonded = true,
-            showScanned = true,
             deviceTypeFilter = setOf(DeviceType.BLE, DeviceType.Dual),
-            onStartScan = {
-                ensureBluetoothPermissions {
-                    @SuppressWarnings("MissingPermission")
-                    scanViewModel.startBleScan()
-                }
-            },
-            onDismissRequest = {
-                scanViewModel.stopBleScan()
-                showDevicePicker = false
-            },
-            onSelect = { address, name ->
-                scanViewModel.stopBleScan()
+            defaultScanMode = ScanMode.LeOnly,
+            ensureBluetoothPermissions = ::ensureBluetoothPermissions,
+            onDismissRequest = { showDevicePicker = false },
+            onSelect = { address, name, _ ->
                 targetAddress = address
                 viewModel.setTarget(address, name ?: "")
                 showDevicePicker = false

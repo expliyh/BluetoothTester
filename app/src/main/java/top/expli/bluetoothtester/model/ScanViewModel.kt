@@ -99,6 +99,32 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
         classicScanner.stopScan()
     }
 
+    @RequiresPermission(Manifest.permission.BLUETOOTH_SCAN)
+    fun startScan(mode: ScanMode, clearResults: Boolean = true) {
+        val needBle = mode == ScanMode.LeOnly || mode == ScanMode.Dual
+        val needClassic = mode == ScanMode.BrOnly || mode == ScanMode.Dual
+        val bleScanning = bleScanner.state.value is BleScanner.ScanState.Scanning
+        val classicScanning = classicScanner.state.value is ClassicScanner.ScanState.Scanning
+
+        // Stop scanners that are no longer needed in this mode
+        if (!needBle) stopBleScan()
+        if (!needClassic) stopClassicScan()
+
+        // Start/restart scanners that are needed
+        if (needBle && !bleScanning) {
+            bleScanner.startScan(clearResults = clearResults)
+        }
+        if (needClassic && !classicScanning) {
+            classicScanner.startScan(clearResults = clearResults)
+        }
+    }
+
+    @RequiresPermission(Manifest.permission.BLUETOOTH_SCAN)
+    fun stopAllScans() {
+        stopBleScan()
+        stopClassicScan()
+    }
+
     // ─── Combined devices merge logic ───
 
     @androidx.annotation.VisibleForTesting
@@ -135,7 +161,7 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
                     address = classic.address,
                     name = classic.name,
                     deviceType = classic.deviceType,
-                    rssi = null,
+                    rssi = classic.rssi?.toInt(),
                     bleData = null,
                     classicData = classic
                 )

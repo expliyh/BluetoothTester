@@ -68,8 +68,13 @@ class ClassicScanner(private val context: Context) {
 
     // ─── Public API ───
 
+    fun clearDevices() {
+        deviceMap.clear()
+        _devices.value = emptyList()
+    }
+
     @RequiresPermission(Manifest.permission.BLUETOOTH_SCAN)
-    fun startScan() {
+    fun startScan(clearResults: Boolean = true) {
         val btAdapter = adapter
         if (btAdapter == null) {
             _state.value = ScanState.Error("BluetoothAdapter is null")
@@ -81,9 +86,10 @@ class ClassicScanner(private val context: Context) {
             return
         }
 
-        // Reset state for new scan
-        deviceMap.clear()
-        _devices.value = emptyList()
+        if (clearResults) {
+            deviceMap.clear()
+            _devices.value = emptyList()
+        }
 
         // Register receiver for discovery broadcasts
         registerReceiver()
@@ -133,13 +139,16 @@ class ClassicScanner(private val context: Context) {
         val minorClass = btClass?.deviceClass ?: 0
 
         val deviceType = mapDeviceType(device.type)
+        val rssi = intent.getShortExtra(BluetoothDevice.EXTRA_RSSI, Short.MIN_VALUE)
+            .let { if (it == Short.MIN_VALUE) null else it }
 
         val result = ClassicDeviceResult(
             address = address,
             name = name,
             majorDeviceClass = majorClass,
             minorDeviceClass = minorClass,
-            deviceType = deviceType
+            deviceType = deviceType,
+            rssi = rssi
         )
 
         deviceMap[address] = result
