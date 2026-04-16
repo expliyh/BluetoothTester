@@ -60,6 +60,7 @@ import top.expli.bluetoothtester.model.DeviceType
 import top.expli.bluetoothtester.model.ScanMode
 import top.expli.bluetoothtester.model.ScanViewModel
 import top.expli.bluetoothtester.model.UnifiedDeviceResult
+import top.expli.bluetoothtester.ui.permissions.BluetoothPermissions
 
 private enum class ScanSortOrder(val label: String) {
     RssiDesc("信号强度↓"),
@@ -83,9 +84,11 @@ fun DevicePickerSheet(
     val scanViewModel: ScanViewModel = viewModel()
     val scanUiState by scanViewModel.uiState.collectAsState()
 
-    // Load bonded devices on first composition
+    // Reload bonded devices whenever permission state changes (e.g. user grants
+    // BLUETOOTH_CONNECT from the scan tab after the sheet was already open).
+    val hasPermission = BluetoothPermissions.hasAll(context)
     var bondedDevices by remember { mutableStateOf<List<BondedDeviceItem>>(emptyList()) }
-    LaunchedEffect(Unit) {
+    LaunchedEffect(hasPermission) {
         val result = runCatching { loadBondedDeviceItems(context) }.getOrNull()
         bondedDevices = when (result) {
             is BondedDeviceLoadResult.Success -> result.devices
@@ -187,11 +190,24 @@ fun DevicePickerSheet(
     ) {
         var selectedTab by remember { mutableIntStateOf(0) }
 
-        // Trigger scan when switching to scanned tab or changing scan mode
+        // Request permissions up-front so the bonded tab can load.
+        LaunchedEffect(selectedTab) {
+            if (selectedTab == 0 && !hasPermission) {
+                ensureBluetoothPermissions { /* permission granted — recomposition will reload bonded list */ }
+            }
+        }
+
+        // Clear stale results and start scanning when the user enters the
+        // scan tab.  When only the scan-mode filter changes within the tab,
+        // preserve existing results so devices already discovered under the
+        // previous mode are not lost.
+        var scanTabEntered by remember { mutableStateOf(false) }
         LaunchedEffect(selectedTab, scanMode) {
             if (selectedTab == 1) {
+                val clear = !scanTabEntered
+                scanTabEntered = true
                 ensureBluetoothPermissions {
-                    scanViewModel.startScan(scanMode)
+                    scanViewModel.startScan(scanMode, clearResults = clear)
                 }
             }
         }
@@ -227,7 +243,8 @@ fun DevicePickerSheet(
                     isScanning = isScanning,
                     onRescan = {
                         ensureBluetoothPermissions {
-                            scanViewModel.startScan(scanMode)
+                            scanViewModel.stopAllScans()
+                            scanViewModel.startScan(scanMode, clearResults = true)
                         }
                     }
                 )
