@@ -215,34 +215,31 @@ fun ClientTabPage(
             val route = entry.toRoute<ClientRoute.SessionDetail>()
             val sessionKey = route.sessionKey
 
-            // Sync ViewModel's selectedKey to this session.
-            // Try active sessions first; fall back to history rehydration
-            // (needed when the route is restored after process recreation).
-            // If neither source has the key, pop the route.
-            var rehydrated by remember(sessionKey) { mutableStateOf(false) }
-            LaunchedEffect(sessionKey) {
-                val sessionId = sessionKey.removePrefix("client:")
+            val sessionId = sessionKey.removePrefix("client:")
+            val selectedSession = state.sessions[sessionKey]
+            val historySnapshots = state.clientSessionHistory
+
+            // Rehydrate session into the sessions map.
+            // Runs reactively: on first composition the active sessions map
+            // or clientSessionHistory may not yet be populated (async load in
+            // ViewModel), so we re-trigger whenever either source updates.
+            LaunchedEffect(sessionKey, selectedSession, historySnapshots) {
+                if (selectedSession != null) return@LaunchedEffect
+                // Try active session first, then history snapshot
                 if (latestState.sessions.containsKey(sessionKey)) {
                     vm.selectClientSession(sessionId)
                 } else {
                     vm.selectClientHistorySession(sessionId)
                 }
-                rehydrated = true
             }
 
-            val selectedSession = state.sessions[sessionKey]
-
-            // Navigate back if session was present but is now gone.
-            // Skip the initial null: navigate() fires before ViewModel state
-            // propagates, so the first composition may see null transiently.
+            // Pop if the session was present and then disappeared (e.g. deleted).
+            // Do NOT pop when selectedSession is null but history hasn't loaded
+            // yet — the empty list is the initial state before the async load.
             var sessionSeen by remember(sessionKey) { mutableStateOf(false) }
             if (selectedSession != null) sessionSeen = true
-            LaunchedEffect(selectedSession, sessionSeen, rehydrated) {
-                if (rehydrated && !sessionSeen && selectedSession == null) {
-                    // Rehydration completed but session still not found — pop
-                    navController.navigateUp()
-                } else if (sessionSeen && selectedSession == null) {
-                    // Session was present but disappeared
+            LaunchedEffect(selectedSession, sessionSeen) {
+                if (sessionSeen && selectedSession == null) {
                     navController.navigateUp()
                 }
             }
