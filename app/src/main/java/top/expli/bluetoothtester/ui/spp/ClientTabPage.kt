@@ -215,12 +215,19 @@ fun ClientTabPage(
             val route = entry.toRoute<ClientRoute.SessionDetail>()
             val sessionKey = route.sessionKey
 
-            // Sync ViewModel's selectedKey to this session
+            // Sync ViewModel's selectedKey to this session.
+            // Try active sessions first; fall back to history rehydration
+            // (needed when the route is restored after process recreation).
+            // If neither source has the key, pop the route.
+            var rehydrated by remember(sessionKey) { mutableStateOf(false) }
             LaunchedEffect(sessionKey) {
                 val sessionId = sessionKey.removePrefix("client:")
-                if (state.selectedKey != sessionKey) {
+                if (latestState.sessions.containsKey(sessionKey)) {
                     vm.selectClientSession(sessionId)
+                } else {
+                    vm.selectClientHistorySession(sessionId)
                 }
+                rehydrated = true
             }
 
             val selectedSession = state.sessions[sessionKey]
@@ -230,8 +237,12 @@ fun ClientTabPage(
             // propagates, so the first composition may see null transiently.
             var sessionSeen by remember(sessionKey) { mutableStateOf(false) }
             if (selectedSession != null) sessionSeen = true
-            LaunchedEffect(selectedSession, sessionSeen) {
-                if (sessionSeen && selectedSession == null) {
+            LaunchedEffect(selectedSession, sessionSeen, rehydrated) {
+                if (rehydrated && !sessionSeen && selectedSession == null) {
+                    // Rehydration completed but session still not found — pop
+                    navController.navigateUp()
+                } else if (sessionSeen && selectedSession == null) {
+                    // Session was present but disappeared
                     navController.navigateUp()
                 }
             }
