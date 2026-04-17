@@ -1,13 +1,11 @@
 package top.expli.bluetoothtester.ui.spp
 
 import android.annotation.SuppressLint
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -28,6 +26,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewModelScope
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
+import androidx.navigation.toRoute
 import kotlinx.coroutines.launch
 import top.expli.bluetoothtester.data.SettingsStore
 import top.expli.bluetoothtester.model.DeviceType
@@ -37,6 +40,7 @@ import top.expli.bluetoothtester.model.SppConnectionState
 import top.expli.bluetoothtester.model.SppUiState
 import top.expli.bluetoothtester.model.SppViewModel
 import top.expli.bluetoothtester.ui.common.DevicePickerSheet
+import top.expli.bluetoothtester.ui.navigation.AppNavTransitions
 
 @SuppressLint("MissingPermission")
 @Composable
@@ -47,7 +51,7 @@ fun ClientTabPage(
     ensureBluetoothPermissions: (() -> Unit) -> Unit,
     onScrollToLatest: (() -> Unit) -> Unit,
     onIsInDetailChanged: (Boolean) -> Unit,
-    onBackHandler: ((() -> Unit)?) -> Unit = {},
+    onBackClick: ((() -> Unit)?) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -57,20 +61,6 @@ fun ClientTabPage(
     val address by vm.clientControlAddress.collectAsState()
     val uuid by vm.clientControlUuid.collectAsState()
     val securityMode by vm.clientControlSecurityMode.collectAsState()
-
-    // Client Tab 维护自己的 selectedClientKey，不依赖全局 selectedKey
-    // 避免切换到 Server Tab 时全局 selectedKey 被改为 server key 导致 Client 详情页丢失
-    var selectedClientKey by remember { mutableStateOf<String?>(null) }
-
-    // 同步：当全局 selectedKey 是 client key 时，更新本地状态
-    LaunchedEffect(state.selectedKey) {
-        if (state.selectedKey?.startsWith("client:") == true) {
-            selectedClientKey = state.selectedKey
-        }
-    }
-
-    val selectedSession = selectedClientKey?.let { state.sessions[it] }
-    val inDetail = selectedClientKey != null && selectedSession != null
 
     // Device picker state
     var showDevicePicker by remember { mutableStateOf(false) }
@@ -83,186 +73,220 @@ fun ClientTabPage(
         }
     }
 
+    val navController = rememberNavController()
+    val backStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = backStackEntry?.destination?.route
+    val inDetail = currentRoute != null && currentRoute.contains("SessionDetail")
+
+    // The currently displayed session key (derived from NavHost route)
+    var activeSessionKey by remember { mutableStateOf<String?>(null) }
+
     // Report detail state changes to parent
     LaunchedEffect(inDetail) {
         onIsInDetailChanged(inDetail)
-        onBackHandler(
-            if (inDetail) ({
-                // 返回列表页，不断连 — 连接保持在后台
-                selectedClientKey = null
-                vm.clearSelectedKey()
-            }) else null
-        )
+        onBackClick(if (inDetail) ({ navController.navigateUp() }) else null)
     }
 
     // Defensive cleanup
     DisposableEffect(Unit) {
         onDispose {
-            onBackHandler(null)
             onIsInDetailChanged(false)
+            onBackClick(null)
         }
     }
 
-    if (inDetail) {
-        // 确保 ViewModel 的 selectedKey 指向当前 client session，
-        // 这样所有基于 selectedKey 的无参方法（toggleSpeedTest、sendOnce 等）都能正确工作
-        LaunchedEffect(selectedClientKey) {
-            if (selectedClientKey != null && state.selectedKey != selectedClientKey) {
-                vm.selectClientSession(selectedClientKey!!.removePrefix("client:"))
+    NavHost(
+        navController = navController,
+        startDestination = ClientRoute.SessionList,
+        enterTransition = AppNavTransitions.enter,
+        exitTransition = AppNavTransitions.exit,
+        popEnterTransition = AppNavTransitions.popEnter,
+        popExitTransition = AppNavTransitions.popExit,
+        modifier = modifier
+    ) {
+        composable<ClientRoute.SessionList> {
+            // Main view: Control Card + Session List
+            Column(modifier = Modifier.fillMaxSize()) {
+                // Control Card
+                ClientControlCard(
+                    address = address,
+                    onAddressChange = { vm.clientControlAddress.value = it },
+                    uuid = uuid,
+                    onUuidChange = { vm.clientControlUuid.value = it },
+                    securityMode = securityMode,
+                    onSecurityModeChange = { vm.clientControlSecurityMode.value = it },
+                    onConnect = {
+                        ensureBluetoothPermissions {
+                            val sessionId = vm.createAndConnectClientSession(address, uuid, address, securityMode)
+                            val key = "client:$sessionId"
+                            activeSessionKey = key
+                            vm.selectClientSession(sessionId)
+                            navController.navigate(ClientRoute.SessionDetail(key))
+                        }
+                    },
+                    onDiscoverDevices = {
+                        pickerForReconnect = false
+                        showDevicePicker = true
+                    },
+                    connectEnabled = true,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                )
+
+                // Session List
+                val activeSessions = state.sessions.entries
+                    .filter { entry ->
+                        entry.key.startsWith("client:") &&
+                                (entry.value.connectionState == SppConnectionState.Connected ||
+                                        entry.value.connectionState == SppConnectionState.Connecting)
+                    }
+                    .sortedByDescending { it.value.connectedAt ?: 0L }
+
+                val historySessions = state.clientSessionHistory
+
+                val hasContent = activeSessions.isNotEmpty() || historySessions.isNotEmpty()
+
+                if (hasContent) {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        contentPadding = PaddingValues(bottom = 16.dp)
+                    ) {
+                        // Active sessions
+                        items(activeSessions, key = { it.key }) { (key, session) ->
+                            val sessionId = key.removePrefix("client:")
+                            SessionCard(
+                                sessionId = sessionId,
+                                deviceName = session.device.name,
+                                deviceAddress = session.device.address,
+                                connectionState = session.connectionState,
+                                securityMode = session.securityMode,
+                                isClient = true,
+                                onClick = {
+                                    activeSessionKey = key
+                                    vm.selectClientSession(sessionId)
+                                    navController.navigate(ClientRoute.SessionDetail(key))
+                                }
+                            )
+                        }
+
+                        // History sessions
+                        items(historySessions, key = { "history:${it.sessionId}" }) { snapshot ->
+                            SessionCard(
+                                sessionId = snapshot.sessionId,
+                                deviceName = snapshot.remoteDeviceName
+                                    ?: snapshot.remoteDeviceAddress,
+                                deviceAddress = snapshot.remoteDeviceAddress,
+                                connectionState = SppConnectionState.Closed,
+                                securityMode = snapshot.securityMode,
+                                isClient = true,
+                                disconnectedAt = snapshot.disconnectedAt,
+                                speedTestTxAvgBps = snapshot.speedTestTxAvgBps,
+                                speedTestRxAvgBps = snapshot.speedTestRxAvgBps,
+                                chatCount = snapshot.chat.size,
+                                onClick = {
+                                    val key = "client:${snapshot.sessionId}"
+                                    activeSessionKey = key
+                                    vm.selectClientHistorySession(snapshot.sessionId)
+                                    navController.navigate(ClientRoute.SessionDetail(key))
+                                },
+                                onDelete = { vm.deleteClientHistorySession(snapshot.sessionId) }
+                            )
+                        }
+                    }
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(top = 64.dp),
+                        contentAlignment = Alignment.TopCenter
+                    ) {
+                        Text(
+                            text = "暂无会话，输入地址后点击连接",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
             }
         }
 
-        val isReadOnly = selectedSession.connectionState == SppConnectionState.Closed ||
-                selectedSession.connectionState == SppConnectionState.Error
+        composable<ClientRoute.SessionDetail> { entry ->
+            val route = entry.toRoute<ClientRoute.SessionDetail>()
+            val sessionKey = route.sessionKey
 
-        ClientDetailScreen(
-            modifier = modifier.fillMaxSize(),
-            sessionState = selectedSession,
-            readOnly = isReadOnly,
-            onTextChange = { vm.updateSendingText(it) },
-            onPayloadChange = { vm.updatePayloadSize(it) },
-            onSend = { vm.sendOnce() },
-            onToggleSpeedTest = { ensureBluetoothPermissions { vm.toggleSpeedTest() } },
-            onToggleSpeedTestMode = { vm.toggleSpeedTestMode() },
-            onMuteConsoleDuringTestChange = { vm.setMuteConsoleDuringTest(it) },
-            onSpeedTestWindowOpenChange = { vm.setSpeedTestWindowOpen(it) },
-            onSpeedTestPayloadChange = { vm.updateSpeedTestPayload(it) },
-            onParseIncomingAsTextChange = { vm.updateParseIncomingAsText(it) },
-            onScrollToLatest = onScrollToLatest,
-            onToggleConnection = {
-                val active =
-                    selectedClientKey?.let { latestState.sessions[it] }?.connectionState == SppConnectionState.Connected
-                if (active) {
-                    selectedClientKey?.removePrefix("client:")?.let { vm.disconnectClientSession(it) }
-                } else {
-                    ensureBluetoothPermissions { vm.connect() }
+            // Sync ViewModel's selectedKey to this session
+            LaunchedEffect(sessionKey) {
+                val sessionId = sessionKey.removePrefix("client:")
+                if (state.selectedKey != sessionKey) {
+                    vm.selectClientSession(sessionId)
                 }
-            },
-            onClearChat = { vm.clearChat() },
-            onConnectFromBondedDevice = {
-                pickerForReconnect = true
-                showDevicePicker = true
-            },
-            onStartPeriodicTest = { vm.startPeriodicTestSelected() },
-            onStopPeriodicTest = { vm.stopPeriodicTestSelected() },
-            onUpdatePeriodicInterval = { vm.updatePeriodicTestInterval(it) },
-            onUpdatePeriodicStopCondition = { vm.updatePeriodicTestStopCondition(it) },
-            onUpdatePeriodicSendPayloadSize = { vm.updatePeriodicTestSendPayloadSize(it) },
-            onStartConnectionCycleTest = { ensureBluetoothPermissions { vm.startConnectionCycleTestSelected() } },
-            onStopConnectionCycleTest = { vm.stopConnectionCycleTestSelected() },
-            onUpdateConnectionCycleTargetCount = { vm.updateConnectionCycleTargetCount(it) },
-            onUpdateConnectionCycleInterval = { vm.updateConnectionCycleInterval(it) },
-            onUpdateConnectionCycleTimeout = { vm.updateConnectionCycleTimeout(it) },
-            onStartPingTest = { vm.startPingTestSelected() },
-            onStopPingTest = { vm.stopPingTestSelected() },
-            onUpdatePingTargetCount = { vm.updatePingTestTargetCount(it) },
-            onUpdatePingInterval = { vm.updatePingTestInterval(it) },
-            onUpdatePingTimeout = { vm.updatePingTestTimeout(it) },
-            onUpdatePingPaddingSize = { vm.updatePingTestPaddingSize(it) },
-            onDisconnectDuringTest = { vm.disconnectDuringTestSelected() },
-            onAutoReconnectEnabledChange = { vm.updateAutoReconnectEnabled(it) },
-            onSpeedTestWithCrcChange = { vm.updateSpeedTestWithCrc(it) },
-            onSpeedTestTargetBytesChange = { vm.updateSpeedTestTargetBytes(it) },
-            onSendPayloadSizeChange = { vm.updateSendPayloadSize(it) }
-        )
-    } else {
-        // Main view: Control Card + Session List
-        Column(modifier = modifier.fillMaxSize()) {
-            // Control Card
-            ClientControlCard(
-                address = address,
-                onAddressChange = { vm.clientControlAddress.value = it },
-                uuid = uuid,
-                onUuidChange = { vm.clientControlUuid.value = it },
-                securityMode = securityMode,
-                onSecurityModeChange = { vm.clientControlSecurityMode.value = it },
-                onConnect = {
-                    ensureBluetoothPermissions {
-                        val sessionId = vm.createAndConnectClientSession(address, uuid, address, securityMode)
-                        selectedClientKey = "client:$sessionId"
-                    }
-                },
-                onDiscoverDevices = {
-                    pickerForReconnect = false
-                    showDevicePicker = true
-                },
-                connectEnabled = true,
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
-            )
+            }
 
-            // Session List
-            val activeSessions = state.sessions.entries
-                .filter { entry ->
-                    entry.key.startsWith("client:") &&
-                            (entry.value.connectionState == SppConnectionState.Connected ||
-                                    entry.value.connectionState == SppConnectionState.Connecting)
+            val selectedSession = state.sessions[sessionKey]
+
+            // Navigate back if session no longer exists
+            LaunchedEffect(selectedSession) {
+                if (selectedSession == null) {
+                    navController.navigateUp()
                 }
-                .sortedByDescending { it.value.connectedAt ?: 0L }
+            }
 
-            val historySessions = state.clientSessionHistory
+            if (selectedSession != null) {
+                val isReadOnly = selectedSession.connectionState == SppConnectionState.Closed ||
+                        selectedSession.connectionState == SppConnectionState.Error
 
-            val hasContent = activeSessions.isNotEmpty() || historySessions.isNotEmpty()
-
-            if (hasContent) {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    contentPadding = PaddingValues(bottom = 16.dp)
-                ) {
-                    // Active sessions
-                    items(activeSessions, key = { it.key }) { (key, session) ->
-                        val sessionId = key.removePrefix("client:")
-                        SessionCard(
-                            sessionId = sessionId,
-                            deviceName = session.device.name,
-                            deviceAddress = session.device.address,
-                            connectionState = session.connectionState,
-                            securityMode = session.securityMode,
-                            isClient = true,
-                            onClick = {
-                                selectedClientKey = key
-                                vm.selectClientSession(sessionId)
-                            }
-                        )
-                    }
-
-                    // History sessions
-                    items(historySessions, key = { "history:${it.sessionId}" }) { snapshot ->
-                        SessionCard(
-                            sessionId = snapshot.sessionId,
-                            deviceName = snapshot.remoteDeviceName
-                                ?: snapshot.remoteDeviceAddress,
-                            deviceAddress = snapshot.remoteDeviceAddress,
-                            connectionState = SppConnectionState.Closed,
-                            securityMode = snapshot.securityMode,
-                            isClient = true,
-                            disconnectedAt = snapshot.disconnectedAt,
-                            speedTestTxAvgBps = snapshot.speedTestTxAvgBps,
-                            speedTestRxAvgBps = snapshot.speedTestRxAvgBps,
-                            chatCount = snapshot.chat.size,
-                            onClick = {
-                                selectedClientKey = "client:${snapshot.sessionId}"
-                                vm.selectClientHistorySession(snapshot.sessionId)
-                            },
-                            onDelete = { vm.deleteClientHistorySession(snapshot.sessionId) }
-                        )
-                    }
-                }
-            } else {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(top = 64.dp),
-                    contentAlignment = Alignment.TopCenter
-                ) {
-                    Text(
-                        text = "暂无会话，输入地址后点击连接",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+                ClientDetailScreen(
+                    modifier = Modifier.fillMaxSize(),
+                    sessionState = selectedSession,
+                    readOnly = isReadOnly,
+                    onTextChange = { vm.updateSendingText(it) },
+                    onPayloadChange = { vm.updatePayloadSize(it) },
+                    onSend = { vm.sendOnce() },
+                    onToggleSpeedTest = { ensureBluetoothPermissions { vm.toggleSpeedTest() } },
+                    onToggleSpeedTestMode = { vm.toggleSpeedTestMode() },
+                    onMuteConsoleDuringTestChange = { vm.setMuteConsoleDuringTest(it) },
+                    onSpeedTestWindowOpenChange = { vm.setSpeedTestWindowOpen(it) },
+                    onSpeedTestPayloadChange = { vm.updateSpeedTestPayload(it) },
+                    onParseIncomingAsTextChange = { vm.updateParseIncomingAsText(it) },
+                    onScrollToLatest = onScrollToLatest,
+                    onToggleConnection = {
+                        val active =
+                            latestState.sessions[sessionKey]?.connectionState == SppConnectionState.Connected
+                        if (active) {
+                            sessionKey.removePrefix("client:").let { vm.disconnectClientSession(it) }
+                        } else {
+                            ensureBluetoothPermissions { vm.connect() }
+                        }
+                    },
+                    onClearChat = { vm.clearChat() },
+                    onConnectFromBondedDevice = {
+                        pickerForReconnect = true
+                        showDevicePicker = true
+                    },
+                    onStartPeriodicTest = { vm.startPeriodicTestSelected() },
+                    onStopPeriodicTest = { vm.stopPeriodicTestSelected() },
+                    onUpdatePeriodicInterval = { vm.updatePeriodicTestInterval(it) },
+                    onUpdatePeriodicStopCondition = { vm.updatePeriodicTestStopCondition(it) },
+                    onUpdatePeriodicSendPayloadSize = { vm.updatePeriodicTestSendPayloadSize(it) },
+                    onStartConnectionCycleTest = { ensureBluetoothPermissions { vm.startConnectionCycleTestSelected() } },
+                    onStopConnectionCycleTest = { vm.stopConnectionCycleTestSelected() },
+                    onUpdateConnectionCycleTargetCount = { vm.updateConnectionCycleTargetCount(it) },
+                    onUpdateConnectionCycleInterval = { vm.updateConnectionCycleInterval(it) },
+                    onUpdateConnectionCycleTimeout = { vm.updateConnectionCycleTimeout(it) },
+                    onStartPingTest = { vm.startPingTestSelected() },
+                    onStopPingTest = { vm.stopPingTestSelected() },
+                    onUpdatePingTargetCount = { vm.updatePingTestTargetCount(it) },
+                    onUpdatePingInterval = { vm.updatePingTestInterval(it) },
+                    onUpdatePingTimeout = { vm.updatePingTestTimeout(it) },
+                    onUpdatePingPaddingSize = { vm.updatePingTestPaddingSize(it) },
+                    onDisconnectDuringTest = { vm.disconnectDuringTestSelected() },
+                    onAutoReconnectEnabledChange = { vm.updateAutoReconnectEnabled(it) },
+                    onSpeedTestWithCrcChange = { vm.updateSpeedTestWithCrc(it) },
+                    onSpeedTestTargetBytesChange = { vm.updateSpeedTestTargetBytes(it) },
+                    onSendPayloadSizeChange = { vm.updateSendPayloadSize(it) }
+                )
             }
         }
     }
@@ -277,7 +301,7 @@ fun ClientTabPage(
             onSelect = { addr, pickedName, _ ->
                 if (pickerForReconnect) {
                     val selected =
-                        selectedClientKey?.let { latestState.sessions[it] }?.device
+                        activeSessionKey?.let { latestState.sessions[it] }?.device
                     if (selected != null) {
                         val resolvedName =
                             if (selected.name.isBlank() || selected.name == selected.address) (pickedName ?: addr) else selected.name
@@ -293,11 +317,5 @@ fun ClientTabPage(
                 showDevicePicker = false
             }
         )
-    }
-
-    // Handle back navigation for Client detail — 只回到列表页，不断连
-    BackHandler(enabled = inDetail) {
-        selectedClientKey = null
-        vm.clearSelectedKey()
     }
 }
