@@ -219,12 +219,20 @@ fun ClientTabPage(
             val selectedSession = state.sessions[sessionKey]
             val historySnapshots = state.clientSessionHistory
 
-            // Rehydrate session into the sessions map.
-            // Runs reactively: on first composition the active sessions map
-            // or clientSessionHistory may not yet be populated (async load in
-            // ViewModel), so we re-trigger whenever either source updates.
-            LaunchedEffect(sessionKey, selectedSession, historySnapshots) {
-                if (selectedSession != null) return@LaunchedEffect
+            // Rehydrate session into the sessions map and keep selectedKey
+            // in sync. Runs reactively: on first composition the active
+            // sessions map or clientSessionHistory may not yet be populated
+            // (async load in ViewModel), so we re-trigger whenever either
+            // source updates. Also re-triggers when selectedKey drifts
+            // (e.g. user switched to a server tab and back).
+            LaunchedEffect(sessionKey, selectedSession, historySnapshots, state.selectedKey) {
+                if (selectedSession != null) {
+                    // Session exists — just ensure selectedKey points here
+                    if (state.selectedKey != sessionKey) {
+                        vm.selectClientSession(sessionId)
+                    }
+                    return@LaunchedEffect
+                }
                 // Try active session first, then history snapshot
                 if (latestState.sessions.containsKey(sessionKey)) {
                     vm.selectClientSession(sessionId)
