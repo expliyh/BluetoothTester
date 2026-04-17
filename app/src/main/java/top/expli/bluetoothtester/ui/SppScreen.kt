@@ -2,7 +2,6 @@ package top.expli.bluetoothtester.ui
 
 import android.annotation.SuppressLint
 import android.app.Activity
-import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -76,11 +75,11 @@ fun SppScreen(onBackClick: () -> Unit) {
 
     // Client tab detail state
     var clientIsInDetail by remember { mutableStateOf(false) }
-    var clientDetailBackHandler: (() -> Unit)? by remember { mutableStateOf(null) }
+    var clientDetailBackClick: (() -> Unit)? by remember { mutableStateOf(null) }
 
     // Server tab detail state
     var serverIsInDetail by remember { mutableStateOf(false) }
-    var serverDetailBackHandler: (() -> Unit)? by remember { mutableStateOf(null) }
+    var serverDetailBackClick: (() -> Unit)? by remember { mutableStateOf(null) }
     var serverDetailAddress by remember { mutableStateOf<String?>(null) }
     var serverDetailIsHistory by remember { mutableStateOf(false) }
 
@@ -148,19 +147,6 @@ fun SppScreen(onBackClick: () -> Unit) {
 
     // Show error snackbar — selectedSession 用于 TopAppBar
     val selectedSession = state.selectedKey?.let { state.sessions[it] }
-
-    // Back handler
-    BackHandler {
-        if (showAddServerDialog) {
-            showAddServerDialog = false
-        } else if (pagerState.currentPage == 0 && clientIsInDetail) {
-            // Let ClientTabPage handle its own back
-        } else if (pagerState.currentPage > 0 && serverIsInDetail) {
-            // Let ServerTabPage handle its own back
-        } else {
-            onBackClick()
-        }
-    }
 
     // Determine TopAppBar content based on current tab
     val currentPage = pagerState.currentPage
@@ -270,11 +256,11 @@ fun SppScreen(onBackClick: () -> Unit) {
                 },
                 navigationIcon = {
                     if (isClientTab && clientIsInDetail) {
-                        IconButton(onClick = { clientDetailBackHandler?.invoke() }) {
+                        IconButton(onClick = { clientDetailBackClick?.invoke() }) {
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
                         }
                     } else if (!isClientTab && serverIsInDetail) {
-                        IconButton(onClick = { serverDetailBackHandler?.invoke() }) {
+                        IconButton(onClick = { serverDetailBackClick?.invoke() }) {
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
                         }
                     } else {
@@ -355,7 +341,7 @@ fun SppScreen(onBackClick: () -> Unit) {
                         ensureBluetoothPermissions = ::ensureBluetoothPermissions,
                         onScrollToLatest = { scrollFn -> scrollToLatest = scrollFn },
                         onIsInDetailChanged = { clientIsInDetail = it },
-                        onBackHandler = { handler -> clientDetailBackHandler = handler }
+                        onBackClick = { handler -> clientDetailBackClick = handler }
                     )
                     else -> {
                         val tabIndex = page - 1
@@ -367,7 +353,7 @@ fun SppScreen(onBackClick: () -> Unit) {
                                 ensureBluetoothPermissions = ::ensureBluetoothPermissions,
                                 onScrollToLatest = { scrollFn -> scrollToLatest = scrollFn },
                                 onIsInDetailChanged = { serverIsInDetail = it },
-                                onBackHandler = { handler -> serverDetailBackHandler = handler },
+                                onBackClick = { handler -> serverDetailBackClick = handler },
                                 onDetailInfo = { address, isHistory ->
                                     serverDetailAddress = address
                                     serverDetailIsHistory = isHistory
