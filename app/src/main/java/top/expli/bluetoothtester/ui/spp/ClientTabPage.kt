@@ -225,9 +225,13 @@ fun ClientTabPage(
 
             val selectedSession = state.sessions[sessionKey]
 
-            // Navigate back if session no longer exists
-            LaunchedEffect(selectedSession) {
-                if (selectedSession == null) {
+            // Navigate back if session was present but is now gone.
+            // Skip the initial null: navigate() fires before ViewModel state
+            // propagates, so the first composition may see null transiently.
+            var sessionSeen by remember(sessionKey) { mutableStateOf(false) }
+            if (selectedSession != null) sessionSeen = true
+            LaunchedEffect(selectedSession, sessionSeen) {
+                if (sessionSeen && selectedSession == null) {
                     navController.navigateUp()
                 }
             }
