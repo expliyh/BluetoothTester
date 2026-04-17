@@ -42,4 +42,7 @@ sealed interface Route {
 
     @Serializable
     data object AdbHelp : Route
+
+    @Serializable
+    data object OpenSourceLicenses : Route
 }
