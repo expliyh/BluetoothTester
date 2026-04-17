@@ -78,8 +78,10 @@ fun ClientTabPage(
     val currentRoute = backStackEntry?.destination?.route
     val inDetail = currentRoute != null && currentRoute.contains("SessionDetail")
 
-    // The currently displayed session key (derived from NavHost route)
-    var activeSessionKey by remember { mutableStateOf<String?>(null) }
+    // Derive active session key from NavHost route (survives recomposition/rotation)
+    val activeSessionKey: String? = if (inDetail) {
+        try { backStackEntry?.toRoute<ClientRoute.SessionDetail>()?.sessionKey } catch (_: Exception) { null }
+    } else null
 
     // Report detail state changes to parent
     LaunchedEffect(inDetail) {
@@ -119,7 +121,6 @@ fun ClientTabPage(
                         ensureBluetoothPermissions {
                             val sessionId = vm.createAndConnectClientSession(address, uuid, address, securityMode)
                             val key = "client:$sessionId"
-                            activeSessionKey = key
                             vm.selectClientSession(sessionId)
                             navController.navigate(ClientRoute.SessionDetail(key))
                         }
@@ -164,7 +165,6 @@ fun ClientTabPage(
                                 securityMode = session.securityMode,
                                 isClient = true,
                                 onClick = {
-                                    activeSessionKey = key
                                     vm.selectClientSession(sessionId)
                                     navController.navigate(ClientRoute.SessionDetail(key))
                                 }
@@ -187,7 +187,6 @@ fun ClientTabPage(
                                 chatCount = snapshot.chat.size,
                                 onClick = {
                                     val key = "client:${snapshot.sessionId}"
-                                    activeSessionKey = key
                                     vm.selectClientHistorySession(snapshot.sessionId)
                                     navController.navigate(ClientRoute.SessionDetail(key))
                                 },
