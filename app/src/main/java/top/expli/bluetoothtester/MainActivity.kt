@@ -87,6 +87,7 @@ import top.expli.bluetoothtester.privilege.shizuku.ShizukuState
 import top.expli.bluetoothtester.ui.AdvancedPermissionScreen
 import top.expli.bluetoothtester.ui.BluetoothToggleScreen
 import top.expli.bluetoothtester.ui.PlaceholderScreen
+import top.expli.bluetoothtester.ui.OpenSourceLicensesScreen
 import top.expli.bluetoothtester.ui.SettingsScreen
 import top.expli.bluetoothtester.ui.SppScreen
 import top.expli.bluetoothtester.ui.ThemeOption
@@ -287,6 +288,7 @@ fun AppNavigation(
                 SettingsScreen(
                     onBackClick = { navController.navigateUp() },
                     onNavigateToAdvancedPermission = { navController.navigate(Route.AdvancedPermission) },
+                    onNavigateToOpenSourceLicenses = { navController.navigate(Route.OpenSourceLicenses) },
                     themeOption = themeOption,
                     onThemeChange = onThemeChange,
                     dynamicColorEnabled = dynamicColorEnabled,
@@ -392,6 +394,7 @@ fun AppNavigation(
             }
 
             composable<Route.AdvancedPermission> { AdvancedPermissionScreen(onBackClick = { navController.navigateUp() }) }
+            composable<Route.OpenSourceLicenses> { OpenSourceLicensesScreen(onBackClick = { navController.navigateUp() }) }
         }
     }
 }

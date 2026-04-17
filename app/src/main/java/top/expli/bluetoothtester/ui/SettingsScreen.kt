@@ -18,6 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Notifications
@@ -66,6 +67,7 @@ enum class ThemeOption { System, Light, Dark }
 fun SettingsScreen(
     onBackClick: () -> Unit,
     onNavigateToAdvancedPermission: () -> Unit,
+    onNavigateToOpenSourceLicenses: () -> Unit,
     themeOption: ThemeOption,
     onThemeChange: (ThemeOption) -> Unit,
     dynamicColorEnabled: Boolean,
@@ -224,6 +226,15 @@ fun SettingsScreen(
                                 }
                             }
                         }
+                    )
+                }
+
+                item {
+                    SettingsClickableItem(
+                        icon = Icons.Default.Description,
+                        title = "开放源代码声明",
+                        description = "查看使用的开源库及其许可证",
+                        onClick = onNavigateToOpenSourceLicenses
                     )
                 }
 
