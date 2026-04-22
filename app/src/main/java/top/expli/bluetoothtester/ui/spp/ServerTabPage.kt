@@ -1,7 +1,6 @@
 package top.expli.bluetoothtester.ui.spp
 
 import android.annotation.SuppressLint
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -31,7 +30,7 @@ fun ServerTabPage(
     ensureBluetoothPermissions: (() -> Unit) -> Unit,
     onScrollToLatest: (() -> Unit) -> Unit,
     onIsInDetailChanged: (Boolean) -> Unit,
-    onBackHandler: ((() -> Unit)?) -> Unit,
+    onBackClick: ((() -> Unit)?) -> Unit,
     onDetailInfo: ((address: String?, isHistory: Boolean) -> Unit),
     modifier: Modifier = Modifier
 ) {
@@ -53,14 +52,14 @@ fun ServerTabPage(
     // Report detail state changes to parent (matches ClientTabPage pattern)
     LaunchedEffect(inDetail) {
         onIsInDetailChanged(inDetail)
-        onBackHandler(if (inDetail) ({ navController.navigateUp() }) else null)
+        onBackClick(if (inDetail) ({ navController.navigateUp() }) else null)
     }
 
     // Defensive cleanup: reset navigation state when leaving Composition
     DisposableEffect(Unit) {
         onDispose {
             onIsInDetailChanged(false)
-            onBackHandler(null)
+            onBackClick(null)
             onDetailInfo(null, false)
         }
     }
@@ -177,11 +176,6 @@ fun ServerTabPage(
                 )
             }
         }
-    }
-
-    // Handle back navigation for Server detail
-    BackHandler(enabled = inDetail) {
-        navController.navigateUp()
     }
 }
 
