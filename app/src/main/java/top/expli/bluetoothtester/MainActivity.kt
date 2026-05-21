@@ -2,7 +2,6 @@ package top.expli.bluetoothtester
 
 import android.os.Bundle
 import android.content.IntentFilter
-import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
 import android.widget.Toast
 import androidx.activity.ComponentActivity
