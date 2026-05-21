@@ -44,7 +44,7 @@ private fun Color.hueShifted(degrees: Float): Color {
         (blue * 255).toInt(),
         hsl
     )
-    hsl[0] = (hsl[0] + degrees / 360f) % 1f
+    hsl[0] = (hsl[0] + degrees) % 360f
     return Color.hsl(hsl[0], hsl[1], hsl[2], alpha)
 }
 
@@ -169,7 +169,14 @@ private fun schemeFromSeed(seedColor: Color, darkTheme: Boolean): ColorScheme {
     val onSecondary = if (secondary.luminance() > 0.5f) Color.Black else Color.White
     val onSecondaryContainer = if (darkTheme) secondaryContainer.tint(0.55f) else secondaryContainer.shade(0.80f)
 
-    val tertiary = primary.hueShifted(50f).desaturated(0.65f)
+    // tertiary：与 primary 形成互补对比，保留更多饱和度作为点缀色
+    var tertiary = primary.hueShifted(50f).desaturated(0.80f)
+    // 确保 tertiary 在对应模式下有足够对比度
+    if (!darkTheme && tertiary.luminance() > 0.60f) {
+        tertiary = tertiary.shade(0.30f)
+    } else if (darkTheme && tertiary.luminance() < 0.35f) {
+        tertiary = tertiary.tint(0.30f)
+    }
     val tertiaryContainer = if (darkTheme) tertiary.shade(0.30f) else tertiary.tint(0.55f)
     val onTertiary = if (tertiary.luminance() > 0.5f) Color.Black else Color.White
     val onTertiaryContainer = if (darkTheme) tertiaryContainer.tint(0.55f) else tertiaryContainer.shade(0.80f)
