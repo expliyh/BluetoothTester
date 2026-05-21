@@ -190,26 +190,17 @@ private fun schemeFromSeed(seedColor: Color, darkTheme: Boolean): ColorScheme {
     val onErrorContainerLight = Color(0xFF410E0B)
     val onErrorContainerDark = Color(0xFFF9DEDC)
 
-    // 从 primary 衍生 surface 色调
-    val baseSurface = if (darkTheme) Color(0xFF1C1B1F) else Color(0xFFFFFBFE)
-    // surfaceVariant：在 surface 上叠加 primary 色调
-    val surfaceVariant = if (darkTheme) {
-        baseSurface.blend(primary, 0.10f)
-    } else {
-        // 浅色模式下需要更高的混合比才能看出来
-        baseSurface.blend(primary, 0.08f)
-    }
+    // Surface 系列使用 Material 3 基准中性色调，确保卡片背景和文字有足够对比度
+    val surface = if (darkTheme) Color(0xFF1C1B1F) else Color(0xFFFFFBFE)
     val onSurface = if (darkTheme) Color(0xFFE6E1E5) else Color(0xFF1C1B1F)
-    val onSurfaceVariant = if (darkTheme) {
-        onSurface.blend(primary.desaturated(0.5f), 0.30f)
+    // surfaceVariant：比 surface 深一度，形成卡片层次感（保持微弱的主题色氛围）
+    val surfaceVariant = if (darkTheme) {
+        Color(0xFF2C2B30).blend(primary.desaturated(0.85f), 0.06f)
     } else {
-        onSurface.blend(primary.desaturated(0.5f), 0.25f)
+        Color(0xFFEEEDF2).blend(primary.desaturated(0.90f), 0.04f)
     }
-    val outline = if (darkTheme) {
-        onSurface.copy(alpha = 0.45f)
-    } else {
-        onSurface.copy(alpha = 0.45f)
-    }
+    val onSurfaceVariant = if (darkTheme) Color(0xFFC5C1CA) else Color(0xFF46434E)
+    val outline = if (darkTheme) Color(0xFF938F99) else Color(0xFF79747E)
 
     return if (darkTheme) {
         darkColorScheme(
@@ -229,7 +220,7 @@ private fun schemeFromSeed(seedColor: Color, darkTheme: Boolean): ColorScheme {
             onError = onErrorDark,
             errorContainer = errorContainerDark,
             onErrorContainer = onErrorContainerDark,
-            surface = baseSurface,
+            surface = surface,
             onSurface = onSurface,
             surfaceVariant = surfaceVariant,
             onSurfaceVariant = onSurfaceVariant,
@@ -255,7 +246,7 @@ private fun schemeFromSeed(seedColor: Color, darkTheme: Boolean): ColorScheme {
             onError = onErrorLight,
             errorContainer = errorContainerLight,
             onErrorContainer = onErrorContainerLight,
-            surface = baseSurface,
+            surface = surface,
             onSurface = onSurface,
             surfaceVariant = surfaceVariant,
             onSurfaceVariant = onSurfaceVariant,
