@@ -99,8 +99,12 @@ object AdbSessionManager : AdbCommandHandler {
 
     override suspend fun handleSppRegister(params: Map<String, String>): AdbResponse {
         activate()
-        val name = params["name"]!!
-        val address = params["address"]!!
+        val name = params["name"] ?: return logged("spp.register", AdbResponse(
+            success = false, error = "missing_param", message = "缺少 name 参数"
+        ))
+        val address = params["address"] ?: return logged("spp.register", AdbResponse(
+            success = false, error = "missing_param", message = "缺少 address 参数"
+        ))
         val uuid = params["uuid"] ?: DEFAULT_SPP_UUID
 
         updateDeviceState(address, name, uuid, "Idle")
@@ -117,7 +121,9 @@ object AdbSessionManager : AdbCommandHandler {
 
     override suspend fun handleSppConnect(params: Map<String, String>): AdbResponse {
         activate()
-        val address = params["address"]!!
+        val address = params["address"] ?: return logged("spp.connect", AdbResponse(
+            success = false, error = "missing_param", message = "缺少 address 参数"
+        ))
         val name = params["name"] ?: address
         val uuid = params["uuid"] ?: DEFAULT_SPP_UUID
         val ctx = appContext ?: return logged("spp.connect", AdbResponse(
@@ -191,7 +197,9 @@ object AdbSessionManager : AdbCommandHandler {
     }
 
     override suspend fun handleSppDisconnect(params: Map<String, String>): AdbResponse {
-        val address = params["address"]!!
+        val address = params["address"] ?: return logged("spp.disconnect", AdbResponse(
+            success = false, error = "missing_param", message = "缺少 address 参数"
+        ))
         val mgr = connections.remove(address)
             ?: return logged("spp.disconnect", AdbResponse(
                 success = false, error = "not_found", message = "未找到地址 $address 的连接"
@@ -212,8 +220,12 @@ object AdbSessionManager : AdbCommandHandler {
     }
 
     override suspend fun handleSppSend(params: Map<String, String>): AdbResponse {
-        val address = params["address"]!!
-        val data = params["data"]!!
+        val address = params["address"] ?: return logged("spp.send", AdbResponse(
+            success = false, error = "missing_param", message = "缺少 address 参数"
+        ))
+        val data = params["data"] ?: return logged("spp.send", AdbResponse(
+            success = false, error = "missing_param", message = "缺少 data 参数"
+        ))
         val hex = params["hex"]?.let { it == "true" || it == "1" } ?: false
 
         val mgr = connections[address]
@@ -252,7 +264,9 @@ object AdbSessionManager : AdbCommandHandler {
     }
 
     override suspend fun handleSppSpeedTestStart(params: Map<String, String>): AdbResponse {
-        val address = params["address"]!!
+        val address = params["address"] ?: return logged("spp.speed_test.start", AdbResponse(
+            success = false, error = "missing_param", message = "缺少 address 参数"
+        ))
         val mgr = connections[address]
             ?: return logged("spp.speed_test.start", AdbResponse(
                 success = false, error = "not_connected", message = "设备未连接"
@@ -311,7 +325,9 @@ object AdbSessionManager : AdbCommandHandler {
     }
 
     override suspend fun handleSppSpeedTestStop(params: Map<String, String>): AdbResponse {
-        val address = params["address"]!!
+        val address = params["address"] ?: return logged("spp.speed_test.stop", AdbResponse(
+            success = false, error = "missing_param", message = "缺少 address 参数"
+        ))
         val job = speedTestJobs.remove(address)
             ?: return logged("spp.speed_test.stop", AdbResponse(
                 success = true, message = "测速未在运行"
