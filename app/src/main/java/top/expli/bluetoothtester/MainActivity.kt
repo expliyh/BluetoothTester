@@ -281,7 +281,7 @@ fun AppNavigation(
     onLocalSocketDebugChange: (Boolean) -> Unit = {}
 ) {
     val navController = rememberNavController()
-    var devModeUnlocked by remember { mutableStateOf(localSocketDebugEnabled) }
+    var devModeUnlocked by rememberSaveable { mutableStateOf(localSocketDebugEnabled) }
     var renderFullUi by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
         withFrameNanos { }
