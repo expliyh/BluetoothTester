@@ -10,6 +10,7 @@ object AppStateChecker {
 
     @Volatile
     var isInForeground: Boolean = false
+        internal set
 
     fun isAppReady(context: Context? = null): Boolean {
         return isInForeground
