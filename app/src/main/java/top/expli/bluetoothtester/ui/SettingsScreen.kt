@@ -300,11 +300,7 @@ fun SettingsScreen(
             modifier = Modifier.align(Alignment.BottomCenter)
         ) {
             devToastText?.let { text ->
-                val isDark = when (themeOption) {
-                    ThemeOption.Dark -> true
-                    ThemeOption.Light -> false
-                    ThemeOption.System -> isSystemInDarkTheme()
-                }
+                val isDark = isSystemInDarkTheme()
                 Surface(
                     modifier = Modifier
                         .padding(16.dp)
