@@ -71,7 +71,7 @@ object AdbSessionManager : AdbCommandHandler {
 
     private var appContext: Context? = null
     private var adapter: BluetoothAdapter? = null
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val connections = ConcurrentHashMap<String, SppClientManager>()
     private val speedTestJobs = ConcurrentHashMap<String, Job>()
     private val connectionJobs = ConcurrentHashMap<String, MutableList<Job>>()
@@ -96,6 +96,9 @@ object AdbSessionManager : AdbCommandHandler {
         _commandLog.value = emptyList()
         _speedTestStatus.value = null
         _isActive.value = false
+        // Cancel all coroutines and recreate scope for next ADB mode session
+        scope.cancel()
+        scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         Log.i(TAG, "ADB mode exited, all connections cleaned up")
     }
 
