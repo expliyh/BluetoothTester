@@ -92,6 +92,7 @@ import top.expli.bluetoothtester.privilege.shizuku.ShizukuState
 import top.expli.bluetoothtester.ui.AdvancedPermissionScreen
 import top.expli.bluetoothtester.ui.BluetoothToggleScreen
 import top.expli.bluetoothtester.ui.PlaceholderScreen
+import top.expli.bluetoothtester.ui.DeveloperOptionsScreen
 import top.expli.bluetoothtester.ui.OpenSourceLicensesScreen
 import top.expli.bluetoothtester.ui.SettingsScreen
 import top.expli.bluetoothtester.ui.SppScreen
@@ -183,6 +184,7 @@ class MainActivity : ComponentActivity() {
             var themeOption by rememberSaveable { mutableStateOf(ThemeOption.System) }
             var dynamicColorEnabled by rememberSaveable { mutableStateOf(true) }
             var localSocketDebugEnabled by rememberSaveable { mutableStateOf(false) }
+            var devModeUnlocked by rememberSaveable { mutableStateOf(false) }
             val updateVm: AppUpdateViewModel = viewModel()
             val updateState by updateVm.uiState.collectAsState()
             val appCtx = applicationContext
@@ -195,6 +197,11 @@ class MainActivity : ComponentActivity() {
             LaunchedEffect(Unit) {
                 SettingsStore.observeLocalSocketDebug(appCtx).distinctUntilChanged().collect { enabled ->
                     localSocketDebugEnabled = enabled
+                }
+            }
+            LaunchedEffect(Unit) {
+                SettingsStore.observeDevModeUnlocked(appCtx).distinctUntilChanged().collect { unlocked ->
+                    devModeUnlocked = unlocked
                 }
             }
             val darkTheme = when (themeOption) {
@@ -230,6 +237,13 @@ class MainActivity : ComponentActivity() {
                         localSocketDebugEnabled = enabled
                         kotlinx.coroutines.MainScope().launch {
                             SettingsStore.updateLocalSocketDebug(appCtx, enabled)
+                        }
+                    },
+                    devModeUnlocked = devModeUnlocked,
+                    onDevModeUnlockedChange = { unlocked ->
+                        devModeUnlocked = unlocked
+                        kotlinx.coroutines.MainScope().launch {
+                            SettingsStore.updateDevModeUnlocked(appCtx, unlocked)
                         }
                     }
                 )
@@ -277,7 +291,9 @@ fun AppNavigation(
     onUpdateGithubCdn: (String) -> Unit,
     resolveUrl: (String?) -> String?,
     localSocketDebugEnabled: Boolean = false,
-    onLocalSocketDebugChange: (Boolean) -> Unit = {}
+    onLocalSocketDebugChange: (Boolean) -> Unit = {},
+    devModeUnlocked: Boolean = false,
+    onDevModeUnlockedChange: (Boolean) -> Unit = {}
 ) {
     val navController = rememberNavController()
     var renderFullUi by remember { mutableStateOf(false) }
@@ -342,6 +358,7 @@ fun AppNavigation(
                     onBackClick = { navController.navigateUp() },
                     onNavigateToAdvancedPermission = { navController.navigate(Route.AdvancedPermission) },
                     onNavigateToOpenSourceLicenses = { navController.navigate(Route.OpenSourceLicenses) },
+                    onNavigateToDeveloperOptions = { navController.navigate(Route.DeveloperOptions) },
                     themeOption = themeOption,
                     onThemeChange = onThemeChange,
                     dynamicColorEnabled = dynamicColorEnabled,
@@ -350,8 +367,8 @@ fun AppNavigation(
                     onCheckForUpdates = onCheckForUpdates,
                     onUpdateGithubCdn = onUpdateGithubCdn,
                     resolveUrl = resolveUrl,
-                    localSocketDebugEnabled = localSocketDebugEnabled,
-                    onLocalSocketDebugChange = onLocalSocketDebugChange
+                    devModeUnlocked = devModeUnlocked,
+                    onDevModeUnlockedChange = onDevModeUnlockedChange
                 )
             }
 
@@ -448,6 +465,20 @@ fun AppNavigation(
 
             composable<Route.AdvancedPermission> { AdvancedPermissionScreen(onBackClick = { navController.navigateUp() }) }
             composable<Route.OpenSourceLicenses> { OpenSourceLicensesScreen(onBackClick = { navController.navigateUp() }) }
+            composable<Route.DeveloperOptions> {
+                DeveloperOptionsScreen(
+                    onBackClick = { navController.navigateUp() },
+                    localSocketDebugEnabled = localSocketDebugEnabled,
+                    onLocalSocketDebugChange = onLocalSocketDebugChange,
+                    onDisableDevMode = {
+                        onDevModeUnlockedChange(false)
+                        if (localSocketDebugEnabled) {
+                            onLocalSocketDebugChange(false)
+                        }
+                        navController.navigateUp()
+                    }
+                )
+            }
         }
     }
 }
