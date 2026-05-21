@@ -249,8 +249,10 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        // 停止 ADB Control Socket 服务端
-        AdbControlSocketServer.stop()
+        // 配置变更（如旋转屏幕）时不停止单例服务
+        if (!isChangingConfigurations) {
+            AdbControlSocketServer.stop()
+        }
         // 注销 ADB 命令广播接收器（仅当成功注册时）
         if (adbReceiverRegistered) {
             try {
