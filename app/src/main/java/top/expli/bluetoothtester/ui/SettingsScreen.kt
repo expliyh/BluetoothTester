@@ -2,7 +2,13 @@ package top.expli.bluetoothtester.ui
 
 import android.content.Context
 import android.content.Intent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -17,6 +23,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Bluetooth
+import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Info
@@ -45,7 +52,9 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -68,6 +77,7 @@ fun SettingsScreen(
     onBackClick: () -> Unit,
     onNavigateToAdvancedPermission: () -> Unit,
     onNavigateToOpenSourceLicenses: () -> Unit,
+    onNavigateToDeveloperOptions: () -> Unit = {},
     themeOption: ThemeOption,
     onThemeChange: (ThemeOption) -> Unit,
     dynamicColorEnabled: Boolean,
@@ -76,8 +86,8 @@ fun SettingsScreen(
     onCheckForUpdates: () -> Unit,
     onUpdateGithubCdn: (String) -> Unit,
     resolveUrl: (String?) -> String?,
-    localSocketDebugEnabled: Boolean = false,
-    onLocalSocketDebugChange: (Boolean) -> Unit = {}
+    devModeUnlocked: Boolean = false,
+    onDevModeUnlockedChange: (Boolean) -> Unit = {}
 ) {
     val surfaceColor = MaterialTheme.colorScheme.surface
     val context = LocalContext.current
@@ -90,9 +100,17 @@ fun SettingsScreen(
     // 隐藏开发者选项：连续点击"关于应用"7 次激活
     var aboutTapCount by remember { mutableStateOf(0) }
     var lastTapTime by remember { mutableStateOf(0L) }
-    var devModeUnlocked by remember { mutableStateOf(localSocketDebugEnabled) }
+    var devToastText by remember { mutableStateOf<String?>(null) }
+    var devToastKey by remember { mutableIntStateOf(0) }
+    LaunchedEffect(devToastKey) {
+        if (devToastText != null) {
+            kotlinx.coroutines.delay(2000)
+            devToastText = null
+        }
+    }
 
     Surface(color = surfaceColor) {
+        Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
             containerColor = Color.Transparent,
             topBar = {
@@ -220,9 +238,20 @@ fun SettingsScreen(
                                 if (now - lastTapTime > 2000) aboutTapCount = 0
                                 lastTapTime = now
                                 aboutTapCount++
-                                if (aboutTapCount >= 7 && !devModeUnlocked) {
-                                    devModeUnlocked = true
-                                    onLocalSocketDebugChange(true)
+                                when {
+                                    devModeUnlocked && aboutTapCount >= 3 -> {
+                                        devToastText = "您已在开发者模式"
+                                        devToastKey++
+                                    }
+                                    aboutTapCount >= 7 && !devModeUnlocked -> {
+                                        onDevModeUnlockedChange(true)
+                                        devToastText = "开发者模式已启用"
+                                        devToastKey++
+                                    }
+                                    aboutTapCount in 4..6 -> {
+                                        devToastText = "再点击 ${7 - aboutTapCount} 次即可进入开发者模式"
+                                        devToastKey++
+                                    }
                                 }
                             }
                         }
@@ -238,15 +267,14 @@ fun SettingsScreen(
                     )
                 }
 
-                // LocalSocket 调试模式（仅 debug 构建 + 连续点击 7 次后显示）
+                // 开发者选项（仅 debug 构建 + 连续点击 7 次后显示）
                 if (devModeUnlocked && top.expli.bluetoothtester.BuildConfig.ENABLE_LOCAL_SOCKET_DEBUG) {
                     item {
-                        SettingsToggleItem(
-                            icon = Icons.Default.Bluetooth,
-                            title = "LocalSocket 调试",
-                            description = "使用 LocalSocket 替代蓝牙传输（开发调试用）",
-                            checked = localSocketDebugEnabled,
-                            onCheckedChange = onLocalSocketDebugChange
+                        SettingsClickableItem(
+                            icon = Icons.Default.Build,
+                            title = "开发者选项",
+                            description = "LocalSocket 调试等高级开发工具",
+                            onClick = onNavigateToDeveloperOptions
                         )
                     }
                 }
@@ -281,6 +309,38 @@ fun SettingsScreen(
                     Spacer(modifier = Modifier.height(16.dp))
                 }
             }
+        }
+
+        // Custom in-app toast overlay
+        AnimatedVisibility(
+            visible = devToastText != null,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier.align(Alignment.BottomCenter)
+        ) {
+            devToastText?.let { text ->
+                val isDark = when (themeOption) {
+                    ThemeOption.Dark -> true
+                    ThemeOption.Light -> false
+                    ThemeOption.System -> isSystemInDarkTheme()
+                }
+                Surface(
+                    modifier = Modifier
+                        .padding(16.dp)
+                        .padding(bottom = 32.dp),
+                    shape = RoundedCornerShape(24.dp),
+                    color = if (isDark) Color.Black else Color.White,
+                    shadowElevation = 6.dp
+                ) {
+                    Text(
+                        text = text,
+                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
+                        color = if (isDark) Color.White else Color.Black,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
+        }
         }
     }
 

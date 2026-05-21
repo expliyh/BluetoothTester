@@ -92,6 +92,7 @@ import top.expli.bluetoothtester.privilege.shizuku.ShizukuState
 import top.expli.bluetoothtester.ui.AdvancedPermissionScreen
 import top.expli.bluetoothtester.ui.BluetoothToggleScreen
 import top.expli.bluetoothtester.ui.PlaceholderScreen
+import top.expli.bluetoothtester.ui.DeveloperOptionsScreen
 import top.expli.bluetoothtester.ui.OpenSourceLicensesScreen
 import top.expli.bluetoothtester.ui.SettingsScreen
 import top.expli.bluetoothtester.ui.SppScreen
@@ -280,6 +281,7 @@ fun AppNavigation(
     onLocalSocketDebugChange: (Boolean) -> Unit = {}
 ) {
     val navController = rememberNavController()
+    var devModeUnlocked by remember { mutableStateOf(localSocketDebugEnabled) }
     var renderFullUi by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
         withFrameNanos { }
@@ -342,6 +344,7 @@ fun AppNavigation(
                     onBackClick = { navController.navigateUp() },
                     onNavigateToAdvancedPermission = { navController.navigate(Route.AdvancedPermission) },
                     onNavigateToOpenSourceLicenses = { navController.navigate(Route.OpenSourceLicenses) },
+                    onNavigateToDeveloperOptions = { navController.navigate(Route.DeveloperOptions) },
                     themeOption = themeOption,
                     onThemeChange = onThemeChange,
                     dynamicColorEnabled = dynamicColorEnabled,
@@ -350,8 +353,8 @@ fun AppNavigation(
                     onCheckForUpdates = onCheckForUpdates,
                     onUpdateGithubCdn = onUpdateGithubCdn,
                     resolveUrl = resolveUrl,
-                    localSocketDebugEnabled = localSocketDebugEnabled,
-                    onLocalSocketDebugChange = onLocalSocketDebugChange
+                    devModeUnlocked = devModeUnlocked,
+                    onDevModeUnlockedChange = { devModeUnlocked = it }
                 )
             }
 
@@ -448,6 +451,20 @@ fun AppNavigation(
 
             composable<Route.AdvancedPermission> { AdvancedPermissionScreen(onBackClick = { navController.navigateUp() }) }
             composable<Route.OpenSourceLicenses> { OpenSourceLicensesScreen(onBackClick = { navController.navigateUp() }) }
+            composable<Route.DeveloperOptions> {
+                DeveloperOptionsScreen(
+                    onBackClick = { navController.navigateUp() },
+                    localSocketDebugEnabled = localSocketDebugEnabled,
+                    onLocalSocketDebugChange = onLocalSocketDebugChange,
+                    onDisableDevMode = {
+                        devModeUnlocked = false
+                        if (localSocketDebugEnabled) {
+                            onLocalSocketDebugChange(false)
+                        }
+                        navController.navigateUp()
+                    }
+                )
+            }
         }
     }
 }

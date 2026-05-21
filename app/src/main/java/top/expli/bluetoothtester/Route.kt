@@ -45,4 +45,7 @@ sealed interface Route {
 
     @Serializable
     data object OpenSourceLicenses : Route
+
+    @Serializable
+    data object DeveloperOptions : Route
 }
