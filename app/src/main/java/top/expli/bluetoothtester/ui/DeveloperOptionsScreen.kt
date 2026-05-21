@@ -41,7 +41,7 @@ fun DeveloperOptionsScreen(
     onBackClick: () -> Unit,
     localSocketDebugEnabled: Boolean,
     onLocalSocketDebugChange: (Boolean) -> Unit,
-    onDisableDevMode: () -> Unit = {}
+    onDisableDevMode: () -> Unit
 ) {
     Scaffold(
         containerColor = Color.Transparent,

@@ -22,6 +22,7 @@ object SettingsStore {
     private val KEY_GITHUB_CDN = stringPreferencesKey("github_cdn")
     val KEY_ACTIVE_CONNECTIONS = booleanPreferencesKey("active_connections")
     private val KEY_LOCAL_SOCKET_DEBUG = booleanPreferencesKey("local_socket_debug_mode")
+    private val KEY_DEV_MODE_UNLOCKED = booleanPreferencesKey("dev_mode_unlocked")
     private val KEY_CLIENT_DEFAULT_SECURITY_MODE = stringPreferencesKey("client_default_security_mode")
 
     data class Settings(
@@ -101,6 +102,17 @@ object SettingsStore {
     suspend fun updateLocalSocketDebug(context: Context, enabled: Boolean) {
         context.settingsDataStore.edit { prefs ->
             prefs[KEY_LOCAL_SOCKET_DEBUG] = enabled
+        }
+    }
+
+    fun observeDevModeUnlocked(context: Context): Flow<Boolean> =
+        context.settingsDataStore.data.map { prefs ->
+            prefs[KEY_DEV_MODE_UNLOCKED] ?: false
+        }
+
+    suspend fun updateDevModeUnlocked(context: Context, unlocked: Boolean) {
+        context.settingsDataStore.edit { prefs ->
+            prefs[KEY_DEV_MODE_UNLOCKED] = unlocked
         }
     }
 

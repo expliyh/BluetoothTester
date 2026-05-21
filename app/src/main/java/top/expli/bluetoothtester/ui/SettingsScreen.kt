@@ -58,6 +58,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -98,8 +99,8 @@ fun SettingsScreen(
     var showGithubCdnDialog by remember { mutableStateOf(false) }
     var githubCdnDraft by remember { mutableStateOf(updateState.githubCdn) }
     // 隐藏开发者选项：连续点击"关于应用"7 次激活
-    var aboutTapCount by remember { mutableStateOf(0) }
-    var lastTapTime by remember { mutableStateOf(0L) }
+    var aboutTapCount by rememberSaveable { mutableStateOf(0) }
+    var lastTapTime by rememberSaveable { mutableStateOf(0L) }
     var devToastText by remember { mutableStateOf<String?>(null) }
     var devToastKey by remember { mutableIntStateOf(0) }
     LaunchedEffect(devToastKey) {
@@ -233,25 +234,24 @@ fun SettingsScreen(
                         title = "关于应用",
                         description = "版本 ${updateState.currentVersionName}",
                         onClick = {
-                            if (top.expli.bluetoothtester.BuildConfig.ENABLE_LOCAL_SOCKET_DEBUG) {
-                                val now = System.currentTimeMillis()
-                                if (now - lastTapTime > 2000) aboutTapCount = 0
-                                lastTapTime = now
-                                aboutTapCount++
-                                when {
-                                    devModeUnlocked && aboutTapCount >= 3 -> {
-                                        devToastText = "您已在开发者模式"
-                                        devToastKey++
-                                    }
-                                    aboutTapCount >= 7 && !devModeUnlocked -> {
-                                        onDevModeUnlockedChange(true)
-                                        devToastText = "开发者模式已启用"
-                                        devToastKey++
-                                    }
-                                    aboutTapCount in 4..6 -> {
-                                        devToastText = "再点击 ${7 - aboutTapCount} 次即可进入开发者模式"
-                                        devToastKey++
-                                    }
+                            if (!top.expli.bluetoothtester.BuildConfig.ENABLE_LOCAL_SOCKET_DEBUG) return@SettingsClickableItem
+                            val now = System.currentTimeMillis()
+                            if (now - lastTapTime > 2000) aboutTapCount = 0
+                            lastTapTime = now
+                            aboutTapCount++
+                            when {
+                                devModeUnlocked && aboutTapCount >= 3 -> {
+                                    devToastText = "您已在开发者模式"
+                                    devToastKey++
+                                }
+                                aboutTapCount >= 7 && !devModeUnlocked -> {
+                                    onDevModeUnlockedChange(true)
+                                    devToastText = "开发者模式已启用"
+                                    devToastKey++
+                                }
+                                aboutTapCount in 4..6 -> {
+                                    devToastText = "再点击 ${7 - aboutTapCount} 次即可进入开发者模式"
+                                    devToastKey++
                                 }
                             }
                         }

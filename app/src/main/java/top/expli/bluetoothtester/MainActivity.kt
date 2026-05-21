@@ -184,6 +184,7 @@ class MainActivity : ComponentActivity() {
             var themeOption by rememberSaveable { mutableStateOf(ThemeOption.System) }
             var dynamicColorEnabled by rememberSaveable { mutableStateOf(true) }
             var localSocketDebugEnabled by rememberSaveable { mutableStateOf(false) }
+            var devModeUnlocked by rememberSaveable { mutableStateOf(false) }
             val updateVm: AppUpdateViewModel = viewModel()
             val updateState by updateVm.uiState.collectAsState()
             val appCtx = applicationContext
@@ -196,6 +197,11 @@ class MainActivity : ComponentActivity() {
             LaunchedEffect(Unit) {
                 SettingsStore.observeLocalSocketDebug(appCtx).distinctUntilChanged().collect { enabled ->
                     localSocketDebugEnabled = enabled
+                }
+            }
+            LaunchedEffect(Unit) {
+                SettingsStore.observeDevModeUnlocked(appCtx).distinctUntilChanged().collect { unlocked ->
+                    devModeUnlocked = unlocked
                 }
             }
             val darkTheme = when (themeOption) {
@@ -231,6 +237,13 @@ class MainActivity : ComponentActivity() {
                         localSocketDebugEnabled = enabled
                         kotlinx.coroutines.MainScope().launch {
                             SettingsStore.updateLocalSocketDebug(appCtx, enabled)
+                        }
+                    },
+                    devModeUnlocked = devModeUnlocked,
+                    onDevModeUnlockedChange = { unlocked ->
+                        devModeUnlocked = unlocked
+                        kotlinx.coroutines.MainScope().launch {
+                            SettingsStore.updateDevModeUnlocked(appCtx, unlocked)
                         }
                     }
                 )
@@ -278,10 +291,11 @@ fun AppNavigation(
     onUpdateGithubCdn: (String) -> Unit,
     resolveUrl: (String?) -> String?,
     localSocketDebugEnabled: Boolean = false,
-    onLocalSocketDebugChange: (Boolean) -> Unit = {}
+    onLocalSocketDebugChange: (Boolean) -> Unit = {},
+    devModeUnlocked: Boolean = false,
+    onDevModeUnlockedChange: (Boolean) -> Unit = {}
 ) {
     val navController = rememberNavController()
-    var devModeUnlocked by rememberSaveable { mutableStateOf(localSocketDebugEnabled) }
     var renderFullUi by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
         withFrameNanos { }
@@ -354,7 +368,7 @@ fun AppNavigation(
                     onUpdateGithubCdn = onUpdateGithubCdn,
                     resolveUrl = resolveUrl,
                     devModeUnlocked = devModeUnlocked,
-                    onDevModeUnlockedChange = { devModeUnlocked = it }
+                    onDevModeUnlockedChange = onDevModeUnlockedChange
                 )
             }
 
@@ -457,7 +471,7 @@ fun AppNavigation(
                     localSocketDebugEnabled = localSocketDebugEnabled,
                     onLocalSocketDebugChange = onLocalSocketDebugChange,
                     onDisableDevMode = {
-                        devModeUnlocked = false
+                        onDevModeUnlockedChange(false)
                         if (localSocketDebugEnabled) {
                             onLocalSocketDebugChange(false)
                         }
