@@ -47,9 +47,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import top.expli.bluetoothtester.adb.AdbSessionManager
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -277,7 +277,7 @@ private fun SpeedTestCard(status: AdbSessionManager.SpeedTestStatus) {
 
 @Composable
 private fun LogEntryRow(entry: AdbSessionManager.LogEntry) {
-    val timeFormat = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
+    val timeFormat = remember { DateTimeFormatter.ofPattern("HH:mm:ss") }
     val statusDot = if (entry.success) MaterialTheme.colorScheme.primary
     else MaterialTheme.colorScheme.error
 
@@ -286,7 +286,7 @@ private fun LogEntryRow(entry: AdbSessionManager.LogEntry) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            timeFormat.format(Date(entry.timestamp)),
+            timeFormat.format(Instant.ofEpochMilli(entry.timestamp).atZone(ZoneId.systemDefault())),
             style = MaterialTheme.typography.labelSmall,
             fontFamily = FontFamily.Monospace,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
