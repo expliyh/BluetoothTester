@@ -17,6 +17,7 @@ import java.io.BufferedWriter
 import java.io.IOException
 import java.io.InputStreamReader
 import java.io.OutputStreamWriter
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
@@ -61,6 +62,7 @@ object AdbControlSocketServer {
     private var acceptJob: Job? = null
     private val connectionCount = AtomicInteger(0)
     private val activeConnections = AtomicInteger(0)
+    private val activeClients = ConcurrentHashMap<LocalSocket, Boolean>(4)
 
     /** 累计接收的连接数 */
     val totalConnections: Int get() = connectionCount.get()
@@ -126,6 +128,12 @@ object AdbControlSocketServer {
         Log.i(LOG_TAG, "正在停止 ADB Control Socket 服务端...")
         _state.value = State.Stopped
 
+        // Close all active client connections — they may be blocked on read
+        activeClients.keys().toList().forEach { client ->
+            try { client.close() } catch (_: IOException) {}
+        }
+        activeClients.clear()
+
         acceptJob?.cancel()
         acceptJob = null
 
@@ -144,6 +152,7 @@ object AdbControlSocketServer {
      * 逐行读取 JSON 请求，路由到 AdbCommandRouter，写回 JSON 响应。
      */
     private suspend fun handleConnection(client: LocalSocket) {
+        activeClients[client] = true
         try {
             val reader = BufferedReader(InputStreamReader(client.inputStream))
             val writer = BufferedWriter(OutputStreamWriter(client.outputStream))
@@ -243,6 +252,7 @@ object AdbControlSocketServer {
         } catch (e: Exception) {
             Log.e(LOG_TAG, "连接处理异常: ${e.message}", e)
         } finally {
+            activeClients.remove(client)
             activeConnections.decrementAndGet()
             try {
                 client.close()
