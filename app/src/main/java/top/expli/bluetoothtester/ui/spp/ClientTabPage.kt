@@ -241,13 +241,17 @@ fun ClientTabPage(
                 }
             }
 
-            // Pop if the session was present and then disappeared (e.g. deleted).
-            // Do NOT pop when selectedSession is null but history hasn't loaded
-            // yet — the empty list is the initial state before the async load.
+            // Pop when the session is confirmed unreachable:
+            // 1. Session was present and then disappeared (deletion mid-view)
+            // 2. History finished loading but the key wasn't found anywhere
+            //    (stale route restored after the entry was deleted)
             var sessionSeen by remember(sessionKey) { mutableStateOf(false) }
             if (selectedSession != null) sessionSeen = true
-            LaunchedEffect(selectedSession, sessionSeen) {
+            val historyLoaded = state.clientHistoryLoaded
+            LaunchedEffect(selectedSession, sessionSeen, historyLoaded) {
                 if (sessionSeen && selectedSession == null) {
+                    navController.navigateUp()
+                } else if (!sessionSeen && historyLoaded && selectedSession == null) {
                     navController.navigateUp()
                 }
             }

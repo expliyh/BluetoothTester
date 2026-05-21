@@ -45,6 +45,7 @@ object AdbParamValidator {
         "status" to listOf("module"),
         "devices" to emptyList(),
         "chat.clear" to listOf("address"),
+        "ping" to emptyList(),  // 内部调试命令
     )
 
     /** 包含 MAC 地址的参数名 */

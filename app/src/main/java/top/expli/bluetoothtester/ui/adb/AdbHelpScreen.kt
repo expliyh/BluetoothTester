@@ -60,6 +60,7 @@ import kotlinx.coroutines.launch
 import top.expli.bluetoothtester.adb.AdbCommandDoc
 import top.expli.bluetoothtester.adb.AdbCommandDocs
 import top.expli.bluetoothtester.adb.AdbCommandReceiver
+import top.expli.bluetoothtester.adb.AdbLocalSocketServer
 
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -110,6 +111,16 @@ fun AdbHelpScreen(onBackClick: () -> Unit) {
                 // ── Intent Action 前缀 + 通用参数格式 ──
                 item {
                     ActionPrefixSection(
+                        onCopy = { text ->
+                            copyToClipboard(context, text)
+                            scope.launch { snackbarHostState.showSnackbar("已复制") }
+                        }
+                    )
+                }
+
+                // ── LocalSocket 连接方式 ──
+                item {
+                    LocalSocketSection(
                         onCopy = { text ->
                             copyToClipboard(context, text)
                             scope.launch { snackbarHostState.showSnackbar("已复制") }
@@ -203,6 +214,130 @@ private fun ActionPrefixSection(onCopy: (String) -> Unit) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+        }
+    }
+}
+
+
+@Composable
+private fun LocalSocketSection(onCopy: (String) -> Unit) {
+    val socketName = "bt_tester_adb_control"
+    val setupCommands = listOf(
+        "# 1. 在电脑上设置 ADB 端口转发" to
+                "adb forward tcp:9876 localabstract:$socketName",
+        "# 2. 测试连通性 (ping)" to
+                "echo '{\"command\":\"ping\"}' | nc localhost 9876",
+        "# 3. 发送 SPP 连接命令" to
+                "echo '{\"command\":\"spp.connect\",\"params\":{\"address\":\"AA:BB:CC:DD:EE:FF\"}}' | nc localhost 9876",
+        "# 4. 交互模式" to
+                "nc localhost 9876\n# 然后逐行输入 JSON 命令，Ctrl+C 退出"
+    )
+    val fullScript = setupCommands.joinToString("\n\n") { "${it.first}\n${it.second}" }
+
+    var expanded by rememberSaveable { mutableStateOf(false) }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f)
+        )
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "LocalSocket 连接 (推荐调试用)",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "通过 adb forward 将 TCP 端口转发到 App 内的 LocalSocket，使用 JSON 行协议交互。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Row {
+                    IconButton(onClick = { onCopy(fullScript) }, modifier = Modifier.size(32.dp)) {
+                        Icon(
+                            imageVector = Icons.Default.ContentCopy,
+                            contentDescription = "复制全部",
+                            modifier = Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    IconButton(onClick = { expanded = !expanded }, modifier = Modifier.size(32.dp)) {
+                        Icon(
+                            imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                            contentDescription = if (expanded) "收起" else "展开",
+                            modifier = Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+
+            // 协议说明
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = "请求格式: {\"command\":\"<命令>\",\"params\":{\"<参数>\":\"<值>\"}}",
+                style = MaterialTheme.typography.bodySmall,
+                fontFamily = FontFamily.Monospace,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "响应格式: {\"success\":true|false,\"data\":{...},\"error\":\"<错误码>\",\"message\":\"<描述>\"}",
+                style = MaterialTheme.typography.bodySmall,
+                fontFamily = FontFamily.Monospace,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            // Socket 名称
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "Socket 名称",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            CodeBlock(text = socketName, onCopy = onCopy)
+
+            AnimatedVisibility(
+                visible = expanded,
+                enter = expandVertically(),
+                exit = shrinkVertically()
+            ) {
+                Column(modifier = Modifier.padding(top = 12.dp)) {
+                    Text(
+                        text = "快速上手",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    setupCommands.forEachIndexed { index, (comment, cmd) ->
+                        Text(
+                            text = comment,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        CodeBlock(text = cmd, onCopy = onCopy)
+                        if (index < setupCommands.lastIndex) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                        }
+                    }
+                }
+            }
         }
     }
 }

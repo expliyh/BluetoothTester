@@ -210,8 +210,9 @@ class SppViewModel(app: Application) : AndroidViewModel(app) {
         // ═══ Client 历史会话恢复 ═══
         viewModelScope.launch {
             val history = ClientSessionStore.observe(getApplication()).first()
-            _uiState.update { it.copy(clientSessionHistory = history) }
+            _uiState.update { it.copy(clientSessionHistory = history, clientHistoryLoaded = true) }
         }
+
     }
 
     fun updateSendingText(text: String) {
