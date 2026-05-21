@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import top.expli.bluetoothtester.model.SecurityMode
 import top.expli.bluetoothtester.ui.ThemeOption
+import top.expli.bluetoothtester.ui.theme.ThemePreset
 
 private const val STORE_NAME = "app_settings"
 
@@ -19,6 +20,7 @@ val Context.settingsDataStore by preferencesDataStore(name = STORE_NAME)
 object SettingsStore {
     private val KEY_THEME = intPreferencesKey("theme_option") // 0=System,1=Light,2=Dark
     private val KEY_DYNAMIC = booleanPreferencesKey("dynamic_color_enabled")
+    private val KEY_THEME_PRESET = stringPreferencesKey("theme_preset")
     private val KEY_GITHUB_CDN = stringPreferencesKey("github_cdn")
     val KEY_ACTIVE_CONNECTIONS = booleanPreferencesKey("active_connections")
     private val KEY_LOCAL_SOCKET_DEBUG = booleanPreferencesKey("local_socket_debug_mode")
@@ -28,14 +30,21 @@ object SettingsStore {
     data class Settings(
         val theme: ThemeOption = ThemeOption.System,
         val dynamicColorEnabled: Boolean = true,
+        val themePreset: ThemePreset = ThemePreset.Default,
         val githubCdn: String = ""
     )
 
     internal object Mapper {
-        fun toSettings(themeOrdinal: Int?, dynamicEnabled: Boolean?, githubCdn: String?): Settings {
+        fun toSettings(
+            themeOrdinal: Int?,
+            dynamicEnabled: Boolean?,
+            themePresetName: String?,
+            githubCdn: String?
+        ): Settings {
             return Settings(
                 theme = resolveTheme(themeOrdinal),
                 dynamicColorEnabled = dynamicEnabled ?: true,
+                themePreset = resolveThemePreset(themePresetName),
                 githubCdn = githubCdn.orEmpty()
             )
         }
@@ -43,6 +52,12 @@ object SettingsStore {
         fun resolveTheme(themeOrdinal: Int?): ThemeOption {
             val safeOrdinal = themeOrdinal ?: ThemeOption.System.ordinal
             return ThemeOption.entries.toTypedArray().getOrElse(safeOrdinal) { ThemeOption.System }
+        }
+
+        fun resolveThemePreset(name: String?): ThemePreset {
+            return name?.let { n ->
+                ThemePreset.entries.find { it.name == n }
+            } ?: ThemePreset.Default
         }
 
         fun normalizeGithubCdn(cdn: String): String? {
@@ -56,6 +71,7 @@ object SettingsStore {
             Mapper.toSettings(
                 themeOrdinal = prefs[KEY_THEME],
                 dynamicEnabled = prefs[KEY_DYNAMIC],
+                themePresetName = prefs[KEY_THEME_PRESET],
                 githubCdn = prefs[KEY_GITHUB_CDN]
             )
         }
@@ -69,6 +85,12 @@ object SettingsStore {
     suspend fun updateDynamic(context: Context, enabled: Boolean) {
         context.settingsDataStore.edit { prefs ->
             prefs[KEY_DYNAMIC] = enabled
+        }
+    }
+
+    suspend fun updateThemePreset(context: Context, preset: ThemePreset) {
+        context.settingsDataStore.edit { prefs ->
+            prefs[KEY_THEME_PRESET] = preset.name
         }
     }
 

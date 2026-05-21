@@ -101,6 +101,8 @@ import top.expli.bluetoothtester.ui.permissions.BluetoothPermissionRequester
 import top.expli.bluetoothtester.ui.navigation.AppNavTransitions
 import top.expli.bluetoothtester.ui.theme.AnimatedBluetoothTesterTheme
 import top.expli.bluetoothtester.ui.theme.BluetoothTesterTheme
+import top.expli.bluetoothtester.ui.theme.ThemePreset
+import top.expli.bluetoothtester.ui.theme.ThemeScreen
 
 class MainActivity : ComponentActivity() {
 
@@ -183,6 +185,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             var themeOption by rememberSaveable { mutableStateOf(ThemeOption.System) }
             var dynamicColorEnabled by rememberSaveable { mutableStateOf(true) }
+            var themePreset by rememberSaveable { mutableStateOf(ThemePreset.Default) }
             var localSocketDebugEnabled by rememberSaveable { mutableStateOf(false) }
             var devModeUnlocked by rememberSaveable { mutableStateOf(false) }
             val updateVm: AppUpdateViewModel = viewModel()
@@ -192,6 +195,7 @@ class MainActivity : ComponentActivity() {
                 SettingsStore.observe(appCtx).distinctUntilChanged().collect { s ->
                     themeOption = s.theme
                     dynamicColorEnabled = s.dynamicColorEnabled
+                    themePreset = s.themePreset
                 }
             }
             LaunchedEffect(Unit) {
@@ -211,13 +215,17 @@ class MainActivity : ComponentActivity() {
             }
             AnimatedBluetoothTesterTheme(
                 darkTheme = darkTheme,
-                dynamicColor = dynamicColorEnabled
+                dynamicColor = dynamicColorEnabled,
+                seedColor = themePreset.seedColor
             ) {
                 LaunchedEffect(themeOption) {
                     SettingsStore.updateTheme(appCtx, themeOption)
                 }
                 LaunchedEffect(dynamicColorEnabled) {
                     SettingsStore.updateDynamic(appCtx, dynamicColorEnabled)
+                }
+                LaunchedEffect(themePreset) {
+                    SettingsStore.updateThemePreset(appCtx, themePreset)
                 }
                 LaunchedEffect(Unit) {
                     withContext(Dispatchers.IO) { ShizukuHelper.init(applicationContext) }
@@ -228,6 +236,8 @@ class MainActivity : ComponentActivity() {
                     onThemeChange = { themeOption = it },
                     dynamicColorEnabled = dynamicColorEnabled,
                     onDynamicColorChange = { dynamicColorEnabled = it },
+                    themePreset = themePreset,
+                    onThemePresetChange = { themePreset = it },
                     updateState = updateState,
                     onCheckForUpdates = { updateVm.checkForUpdates() },
                     onUpdateGithubCdn = { updateVm.updateGithubCdn(it) },
@@ -286,6 +296,8 @@ fun AppNavigation(
     onThemeChange: (ThemeOption) -> Unit,
     dynamicColorEnabled: Boolean,
     onDynamicColorChange: (Boolean) -> Unit,
+    themePreset: ThemePreset,
+    onThemePresetChange: (ThemePreset) -> Unit,
     updateState: AppUpdateUiState,
     onCheckForUpdates: () -> Unit,
     onUpdateGithubCdn: (String) -> Unit,
@@ -359,10 +371,7 @@ fun AppNavigation(
                     onNavigateToAdvancedPermission = { navController.navigate(Route.AdvancedPermission) },
                     onNavigateToOpenSourceLicenses = { navController.navigate(Route.OpenSourceLicenses) },
                     onNavigateToDeveloperOptions = { navController.navigate(Route.DeveloperOptions) },
-                    themeOption = themeOption,
-                    onThemeChange = onThemeChange,
-                    dynamicColorEnabled = dynamicColorEnabled,
-                    onDynamicColorChange = onDynamicColorChange,
+                    onNavigateToTheme = { navController.navigate(Route.ThemeSettings) },
                     updateState = updateState,
                     onCheckForUpdates = onCheckForUpdates,
                     onUpdateGithubCdn = onUpdateGithubCdn,
@@ -477,6 +486,18 @@ fun AppNavigation(
                         }
                         navController.navigateUp()
                     }
+                )
+            }
+
+            composable<Route.ThemeSettings> {
+                ThemeScreen(
+                    currentPreset = themePreset,
+                    onPresetChange = onThemePresetChange,
+                    themeOption = themeOption,
+                    onThemeChange = onThemeChange,
+                    dynamicColorEnabled = dynamicColorEnabled,
+                    onDynamicColorChange = onDynamicColorChange,
+                    onBackClick = { navController.navigateUp() }
                 )
             }
         }
