@@ -107,6 +107,9 @@ class MainActivity : ComponentActivity() {
     // ADB 命令广播接收器（动态注册，避免 Android 8+ 隐式广播限制）
     private val adbCommandReceiver = AdbCommandReceiver()
 
+    // 标记广播接收器是否注册成功
+    private var adbReceiverRegistered = false
+
     // Flag to track if BLE scan was paused when app went to background
     private var scanWasPaused = false
 
@@ -121,11 +124,21 @@ class MainActivity : ComponentActivity() {
         AdbControlSocketServer.start()
 
         // 动态注册 ADB 命令广播接收器
-        ContextCompat.registerReceiver(
-            this, adbCommandReceiver,
-            IntentFilter(AdbCommandReceiver.ACTION),
-            ContextCompat.RECEIVER_EXPORTED
-        )
+        try {
+            ContextCompat.registerReceiver(
+                this, adbCommandReceiver,
+                IntentFilter(AdbCommandReceiver.ACTION),
+                ContextCompat.RECEIVER_EXPORTED
+            )
+            adbReceiverRegistered = true
+        } catch (e: Exception) {
+            android.util.Log.e("BtTesterMain", "ADB 广播接收器注册失败", e)
+            Toast.makeText(
+                this,
+                "ADB 命令广播接收器注册失败，Broadcast 方式将不可用",
+                Toast.LENGTH_LONG
+            ).show()
+        }
 
         // Register ProcessLifecycleOwner observer for foreground/background transitions
         ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
@@ -239,8 +252,14 @@ class MainActivity : ComponentActivity() {
         super.onDestroy()
         // 停止 ADB Control Socket 服务端
         AdbControlSocketServer.stop()
-        // 注销 ADB 命令广播接收器
-        unregisterReceiver(adbCommandReceiver)
+        // 注销 ADB 命令广播接收器（仅当成功注册时）
+        if (adbReceiverRegistered) {
+            try {
+                unregisterReceiver(adbCommandReceiver)
+            } catch (_: IllegalArgumentException) {
+                // Receiver was already unregistered
+            }
+        }
         // Clear active connections flag on normal exit
         kotlinx.coroutines.MainScope().launch(Dispatchers.IO) {
             SettingsStore.setActiveConnections(applicationContext, false)
