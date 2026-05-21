@@ -1,6 +1,8 @@
 package top.expli.bluetoothtester
 
 import android.os.Bundle
+import android.content.IntentFilter
+import androidx.core.content.ContextCompat
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -81,6 +83,9 @@ import top.expli.bluetoothtester.data.SettingsStore
 import top.expli.bluetoothtester.model.AppUpdateUiState
 import top.expli.bluetoothtester.model.AppUpdateViewModel
 import top.expli.bluetoothtester.model.BluetoothToggleViewModel
+import top.expli.bluetoothtester.adb.AdbCommandReceiver
+import top.expli.bluetoothtester.adb.AdbControlSocketServer
+import top.expli.bluetoothtester.adb.AdbSessionManager
 import top.expli.bluetoothtester.privilege.shizuku.ShizukuHelper
 import top.expli.bluetoothtester.privilege.shizuku.ShizukuServiceState
 import top.expli.bluetoothtester.privilege.shizuku.ShizukuState
@@ -98,6 +103,12 @@ import top.expli.bluetoothtester.ui.theme.BluetoothTesterTheme
 
 class MainActivity : ComponentActivity() {
 
+    // ADB 命令广播接收器（动态注册，避免 Android 8+ 隐式广播限制）
+    private val adbCommandReceiver = AdbCommandReceiver()
+
+    // 标记广播接收器是否注册成功
+    private var adbReceiverRegistered = false
+
     // Flag to track if BLE scan was paused when app went to background
     private var scanWasPaused = false
 
@@ -106,6 +117,27 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         top.expli.bluetoothtester.adb.AppStateChecker.isInForeground = true
+
+        // 初始化 ADB 会话管理器并启动 Control Socket 服务端
+        AdbSessionManager.init(applicationContext)
+        AdbControlSocketServer.start()
+
+        // 动态注册 ADB 命令广播接收器
+        try {
+            ContextCompat.registerReceiver(
+                this, adbCommandReceiver,
+                IntentFilter(AdbCommandReceiver.ACTION),
+                ContextCompat.RECEIVER_EXPORTED
+            )
+            adbReceiverRegistered = true
+        } catch (e: Exception) {
+            android.util.Log.e("BtTesterMain", "ADB 广播接收器注册失败", e)
+            Toast.makeText(
+                this,
+                "ADB 命令广播接收器注册失败，Broadcast 方式将不可用",
+                Toast.LENGTH_LONG
+            ).show()
+        }
 
         // Register ProcessLifecycleOwner observer for foreground/background transitions
         ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
@@ -217,6 +249,18 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        // 配置变更（如旋转屏幕）时不停止单例服务
+        if (!isChangingConfigurations) {
+            AdbControlSocketServer.stop()
+        }
+        // 注销 ADB 命令广播接收器（仅当成功注册时）
+        if (adbReceiverRegistered) {
+            try {
+                unregisterReceiver(adbCommandReceiver)
+            } catch (_: IllegalArgumentException) {
+                // Receiver was already unregistered
+            }
+        }
         // Clear active connections flag on normal exit
         kotlinx.coroutines.MainScope().launch(Dispatchers.IO) {
             SettingsStore.setActiveConnections(applicationContext, false)
@@ -243,6 +287,15 @@ fun AppNavigation(
     }
 
     val containerColor = MaterialTheme.colorScheme.surface
+
+    // ADB 模式覆盖：收到 ADB 命令时切换到全屏 ADB 界面
+    val adbActive by AdbSessionManager.isActive.collectAsState()
+    if (adbActive) {
+        top.expli.bluetoothtester.ui.adb.AdbModeScreen(
+            onExit = { AdbSessionManager.exitAdbMode() }
+        )
+        return
+    }
 
     if (!renderFullUi) {
         Scaffold { inner ->

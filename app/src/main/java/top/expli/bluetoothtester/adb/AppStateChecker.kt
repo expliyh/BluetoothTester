@@ -10,8 +10,9 @@ object AppStateChecker {
 
     @Volatile
     var isInForeground: Boolean = false
+        internal set
 
-    fun isAppReady(@Suppress("UNUSED_PARAMETER") context: Context): Boolean {
+    fun isAppReady(context: Context? = null): Boolean {
         return isInForeground
     }
 }

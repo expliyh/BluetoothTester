@@ -196,5 +196,6 @@ data class SppUiState(
     val selectedKey: String? = null,
     val sessions: Map<String, SppSession> = emptyMap(),
     val serverTabs: List<ServerTabConfig> = emptyList(),
-    val clientSessionHistory: List<ClientSessionSnapshot> = emptyList()
+    val clientSessionHistory: List<ClientSessionSnapshot> = emptyList(),
+    val clientHistoryLoaded: Boolean = false
 )
