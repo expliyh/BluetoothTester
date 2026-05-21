@@ -77,7 +77,16 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
         if (filter != null) {
             _filter.value = filter
         }
-        bleScanner.startScan(filter)
+
+        val noActiveScan = bleScanner.state.value !is BleScanner.ScanState.Scanning &&
+                classicScanner.state.value !is ClassicScanner.ScanState.Scanning
+        bleScanner.startScan(filter, clearResults = false)
+
+        // Clear only if the scan actually started successfully
+        if (noActiveScan && bleScanner.state.value is BleScanner.ScanState.Scanning) {
+            bleScanner.clearDevices()
+            classicScanner.clearDevices()
+        }
     }
 
     @RequiresPermission(Manifest.permission.BLUETOOTH_SCAN)
@@ -91,7 +100,16 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
         if (bleScanner.state.value is BleScanner.ScanState.Scanning) {
             _uiState.update { it.copy(showClassicAffectsBleWarning = true) }
         }
-        classicScanner.startScan()
+
+        val noActiveScan = bleScanner.state.value !is BleScanner.ScanState.Scanning &&
+                classicScanner.state.value !is ClassicScanner.ScanState.Scanning
+        classicScanner.startScan(clearResults = false)
+
+        // Clear only if the scan actually started successfully
+        if (noActiveScan && classicScanner.state.value is ClassicScanner.ScanState.Scanning) {
+            bleScanner.clearDevices()
+            classicScanner.clearDevices()
+        }
     }
 
     @RequiresPermission(Manifest.permission.BLUETOOTH_SCAN)
@@ -106,16 +124,28 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
         val bleScanning = bleScanner.state.value is BleScanner.ScanState.Scanning
         val classicScanning = classicScanner.state.value is ClassicScanner.ScanState.Scanning
 
+        val noActiveScan = !bleScanning && !classicScanning
+
         // Stop scanners that are no longer needed in this mode
         if (!needBle) stopBleScan()
         if (!needClassic) stopClassicScan()
 
-        // Start/restart scanners that are needed
+        // Start scanners that are needed (clearResults=false — handled below)
         if (needBle && !bleScanning) {
-            bleScanner.startScan(clearResults = clearResults)
+            bleScanner.startScan(clearResults = false)
         }
         if (needClassic && !classicScanning) {
-            classicScanner.startScan(clearResults = clearResults)
+            classicScanner.startScan(clearResults = false)
+        }
+
+        // Clear only after at least one scan started successfully
+        if (clearResults && noActiveScan) {
+            val bleStarted = needBle && bleScanner.state.value is BleScanner.ScanState.Scanning
+            val classicStarted = needClassic && classicScanner.state.value is ClassicScanner.ScanState.Scanning
+            if (bleStarted || classicStarted) {
+                bleScanner.clearDevices()
+                classicScanner.clearDevices()
+            }
         }
     }
 
