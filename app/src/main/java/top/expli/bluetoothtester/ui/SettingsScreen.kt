@@ -41,8 +41,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -79,10 +77,7 @@ fun SettingsScreen(
     onNavigateToAdvancedPermission: () -> Unit,
     onNavigateToOpenSourceLicenses: () -> Unit,
     onNavigateToDeveloperOptions: () -> Unit = {},
-    themeOption: ThemeOption,
-    onThemeChange: (ThemeOption) -> Unit,
-    dynamicColorEnabled: Boolean,
-    onDynamicColorChange: (Boolean) -> Unit,
+    onNavigateToTheme: () -> Unit,
     updateState: AppUpdateUiState,
     onCheckForUpdates: () -> Unit,
     onUpdateGithubCdn: (String) -> Unit,
@@ -182,21 +177,7 @@ fun SettingsScreen(
                         icon = Icons.Default.Palette,
                         title = "主题",
                         description = "浅色 / 深色 / 跟随系统",
-                        onClick = { }
-                    )
-                }
-
-                item {
-                    ThemeSelector(current = themeOption, onSelect = onThemeChange)
-                }
-
-                item {
-                    SettingsToggleItem(
-                        icon = Icons.Default.Palette,
-                        title = "动态取色",
-                        description = "使用系统壁纸颜色 (Android 12+)",
-                        checked = dynamicColorEnabled,
-                        onCheckedChange = { onDynamicColorChange(it) }
+                        onClick = onNavigateToTheme
                     )
                 }
 
@@ -319,11 +300,7 @@ fun SettingsScreen(
             modifier = Modifier.align(Alignment.BottomCenter)
         ) {
             devToastText?.let { text ->
-                val isDark = when (themeOption) {
-                    ThemeOption.Dark -> true
-                    ThemeOption.Light -> false
-                    ThemeOption.System -> isSystemInDarkTheme()
-                }
+                val isDark = isSystemInDarkTheme()
                 Surface(
                     modifier = Modifier
                         .padding(16.dp)
@@ -605,47 +582,6 @@ private fun SettingsClickableItem(
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(24.dp)
             )
-        }
-    }
-}
-
-@Composable
-private fun ThemeSelector(current: ThemeOption, onSelect: (ThemeOption) -> Unit) {
-    val options = listOf(
-        ThemeOption.System to "跟随系统",
-        ThemeOption.Light to "浅色",
-        ThemeOption.Dark to "深色"
-    )
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(8.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-    ) {
-        Column(
-            modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            options.forEach { (option, label) ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 4.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    RadioButton(
-                        selected = current == option,
-                        onClick = { onSelect(option) },
-                        colors = RadioButtonDefaults.colors(selectedColor = MaterialTheme.colorScheme.primary)
-                    )
-                    Text(
-                        text = label,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-            }
         }
     }
 }

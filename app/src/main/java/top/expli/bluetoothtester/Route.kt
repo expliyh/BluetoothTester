@@ -48,4 +48,7 @@ sealed interface Route {
 
     @Serializable
     data object DeveloperOptions : Route
+
+    @Serializable
+    data object ThemeSettings : Route
 }
