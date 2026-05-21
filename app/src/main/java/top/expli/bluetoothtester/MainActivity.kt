@@ -1,6 +1,9 @@
 package top.expli.bluetoothtester
 
 import android.os.Bundle
+import android.content.IntentFilter
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -81,6 +84,7 @@ import top.expli.bluetoothtester.data.SettingsStore
 import top.expli.bluetoothtester.model.AppUpdateUiState
 import top.expli.bluetoothtester.model.AppUpdateViewModel
 import top.expli.bluetoothtester.model.BluetoothToggleViewModel
+import top.expli.bluetoothtester.adb.AdbCommandReceiver
 import top.expli.bluetoothtester.adb.AdbControlSocketServer
 import top.expli.bluetoothtester.adb.AdbSessionManager
 import top.expli.bluetoothtester.privilege.shizuku.ShizukuHelper
@@ -100,6 +104,9 @@ import top.expli.bluetoothtester.ui.theme.BluetoothTesterTheme
 
 class MainActivity : ComponentActivity() {
 
+    // ADB 命令广播接收器（动态注册，避免 Android 8+ 隐式广播限制）
+    private val adbCommandReceiver = AdbCommandReceiver()
+
     // Flag to track if BLE scan was paused when app went to background
     private var scanWasPaused = false
 
@@ -112,6 +119,13 @@ class MainActivity : ComponentActivity() {
         // 初始化 ADB 会话管理器并启动 Control Socket 服务端
         AdbSessionManager.init(applicationContext)
         AdbControlSocketServer.start()
+
+        // 动态注册 ADB 命令广播接收器
+        ContextCompat.registerReceiver(
+            this, adbCommandReceiver,
+            IntentFilter(AdbCommandReceiver.ACTION),
+            ContextCompat.RECEIVER_EXPORTED
+        )
 
         // Register ProcessLifecycleOwner observer for foreground/background transitions
         ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
@@ -225,6 +239,8 @@ class MainActivity : ComponentActivity() {
         super.onDestroy()
         // 停止 ADB Control Socket 服务端
         AdbControlSocketServer.stop()
+        // 注销 ADB 命令广播接收器
+        unregisterReceiver(adbCommandReceiver)
         // Clear active connections flag on normal exit
         kotlinx.coroutines.MainScope().launch(Dispatchers.IO) {
             SettingsStore.setActiveConnections(applicationContext, false)
