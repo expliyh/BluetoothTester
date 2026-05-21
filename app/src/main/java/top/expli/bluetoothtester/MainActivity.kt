@@ -78,6 +78,7 @@ import androidx.navigation.toRoute
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import top.expli.bluetoothtester.data.SettingsStore
 import top.expli.bluetoothtester.model.AppUpdateUiState
@@ -182,12 +183,30 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+        // 同步读取已保存的设置，避免首帧闪烁
+        val initialSettings = runBlocking(Dispatchers.IO) { SettingsStore.get(applicationContext) }
+        val initialLocalSocketDebug = runBlocking(Dispatchers.IO) { SettingsStore.getLocalSocketDebug(applicationContext) }
+        val initialDevMode = runBlocking(Dispatchers.IO) { SettingsStore.getDevModeUnlocked(applicationContext) }
+
+        // 手动设置 window 背景色，处理用户手动深色模式（系统浅色 + app 深色时 xml -night 不生效）
+        val isDark = when (initialSettings.theme) {
+            ThemeOption.Dark -> true
+            ThemeOption.Light -> false
+            ThemeOption.System -> (resources.configuration.uiMode and
+                    android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
+        }
+        window.setBackgroundDrawable(
+            android.graphics.drawable.ColorDrawable(
+                if (isDark) 0xFF1C1B1F.toInt() else 0xFFFFFBFE.toInt()
+            )
+        )
+
         setContent {
-            var themeOption by rememberSaveable { mutableStateOf(ThemeOption.System) }
-            var dynamicColorEnabled by rememberSaveable { mutableStateOf(true) }
-            var themePreset by rememberSaveable { mutableStateOf(ThemePreset.Default) }
-            var localSocketDebugEnabled by rememberSaveable { mutableStateOf(false) }
-            var devModeUnlocked by rememberSaveable { mutableStateOf(false) }
+            var themeOption by rememberSaveable { mutableStateOf(initialSettings.theme) }
+            var dynamicColorEnabled by rememberSaveable { mutableStateOf(initialSettings.dynamicColorEnabled) }
+            var themePreset by rememberSaveable { mutableStateOf(initialSettings.themePreset) }
+            var localSocketDebugEnabled by rememberSaveable { mutableStateOf(initialLocalSocketDebug) }
+            var devModeUnlocked by rememberSaveable { mutableStateOf(initialDevMode) }
             val updateVm: AppUpdateViewModel = viewModel()
             val updateState by updateVm.uiState.collectAsState()
             val appCtx = applicationContext

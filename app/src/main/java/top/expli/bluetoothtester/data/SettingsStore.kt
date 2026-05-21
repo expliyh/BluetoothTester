@@ -76,6 +76,17 @@ object SettingsStore {
             )
         }
 
+    /** 同步读取当前设置（首次组合前初始化用） */
+    suspend fun get(context: Context): Settings =
+        context.settingsDataStore.data.first().let { prefs ->
+            Mapper.toSettings(
+                themeOrdinal = prefs[KEY_THEME],
+                dynamicEnabled = prefs[KEY_DYNAMIC],
+                themePresetName = prefs[KEY_THEME_PRESET],
+                githubCdn = prefs[KEY_GITHUB_CDN]
+            )
+        }
+
     suspend fun updateTheme(context: Context, theme: ThemeOption) {
         context.settingsDataStore.edit { prefs ->
             prefs[KEY_THEME] = theme.ordinal
@@ -121,6 +132,9 @@ object SettingsStore {
             prefs[KEY_LOCAL_SOCKET_DEBUG] ?: false
         }
 
+    suspend fun getLocalSocketDebug(context: Context): Boolean =
+        context.settingsDataStore.data.first()[KEY_LOCAL_SOCKET_DEBUG] ?: false
+
     suspend fun updateLocalSocketDebug(context: Context, enabled: Boolean) {
         context.settingsDataStore.edit { prefs ->
             prefs[KEY_LOCAL_SOCKET_DEBUG] = enabled
@@ -131,6 +145,9 @@ object SettingsStore {
         context.settingsDataStore.data.map { prefs ->
             prefs[KEY_DEV_MODE_UNLOCKED] ?: false
         }
+
+    suspend fun getDevModeUnlocked(context: Context): Boolean =
+        context.settingsDataStore.data.first()[KEY_DEV_MODE_UNLOCKED] ?: false
 
     suspend fun updateDevModeUnlocked(context: Context, unlocked: Boolean) {
         context.settingsDataStore.edit { prefs ->

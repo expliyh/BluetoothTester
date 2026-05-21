@@ -159,15 +159,16 @@ private fun schemeFromSeed(seedColor: Color, darkTheme: Boolean): ColorScheme {
         primary.tint(if (seedLum > 0.6f) 0.35f else 0.55f)
     }
     val onPrimaryContainer = if (darkTheme) {
-        primaryContainer.tint(0.55f)
+        // 深色模式从 primary 派生亮色调，而非从 primaryContainer 链式运算
+        primary.tint(0.85f)
     } else {
-        primaryContainer.shade(0.80f)
+        primaryContainer.shade(0.85f)
     }
 
     val secondary = primary.hueShifted(15f).desaturated(0.55f)
     val secondaryContainer = if (darkTheme) secondary.shade(0.30f) else secondary.tint(0.55f)
     val onSecondary = if (secondary.luminance() > 0.5f) Color.Black else Color.White
-    val onSecondaryContainer = if (darkTheme) secondaryContainer.tint(0.55f) else secondaryContainer.shade(0.80f)
+    val onSecondaryContainer = if (darkTheme) secondary.tint(0.85f) else secondaryContainer.shade(0.85f)
 
     // tertiary：与 primary 形成互补对比，保留更多饱和度作为点缀色
     var tertiary = primary.hueShifted(50f).desaturated(0.80f)
@@ -179,7 +180,7 @@ private fun schemeFromSeed(seedColor: Color, darkTheme: Boolean): ColorScheme {
     }
     val tertiaryContainer = if (darkTheme) tertiary.shade(0.30f) else tertiary.tint(0.55f)
     val onTertiary = if (tertiary.luminance() > 0.5f) Color.Black else Color.White
-    val onTertiaryContainer = if (darkTheme) tertiaryContainer.tint(0.55f) else tertiaryContainer.shade(0.80f)
+    val onTertiaryContainer = if (darkTheme) tertiary.tint(0.85f) else tertiaryContainer.shade(0.85f)
 
     val errorLight = Color(0xFFB3261E)
     val errorDark = Color(0xFFF2B8B5)
