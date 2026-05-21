@@ -74,6 +74,7 @@ object AdbSessionManager : AdbCommandHandler {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val connections = ConcurrentHashMap<String, SppClientManager>()
     private val speedTestJobs = ConcurrentHashMap<String, Job>()
+    private val connectionJobs = ConcurrentHashMap<String, MutableList<Job>>()
     private var logId = 0L
 
     fun init(context: Context) {
@@ -83,6 +84,9 @@ object AdbSessionManager : AdbCommandHandler {
     }
 
     fun exitAdbMode() {
+        // Cancel all tracked connection coroutines
+        connectionJobs.values.forEach { jobs -> jobs.forEach { it.cancel() } }
+        connectionJobs.clear()
         connections.keys.toList().forEach { addr ->
             connections.remove(addr)?.disconnect()
         }
@@ -169,7 +173,11 @@ object AdbSessionManager : AdbCommandHandler {
         connections[address] = mgr
         updateDeviceState(address, name, uuid, "Connecting")
 
-        scope.launch {
+        // Track coroutine jobs for this connection so they can be cancelled on disconnect
+        val jobs = mutableListOf<Job>()
+        connectionJobs[address] = jobs
+
+        jobs += scope.launch {
             try {
                 mgr.connect()
             } catch (_: Exception) {}
@@ -180,7 +188,7 @@ object AdbSessionManager : AdbCommandHandler {
         }
 
         // Observe state changes
-        scope.launch {
+        jobs += scope.launch {
             mgr.connectionState.collect { state ->
                 updateDeviceState(address, name, uuid, state.name)
             }
@@ -206,6 +214,7 @@ object AdbSessionManager : AdbCommandHandler {
             ))
 
         speedTestJobs.remove(address)?.cancel()
+        connectionJobs.remove(address)?.forEach { it.cancel() }
         mgr.disconnect()
         updateDeviceState(address, "", "", "Disconnected")
 
