@@ -8,7 +8,7 @@ import kotlinx.serialization.json.buildJsonObject
 import top.expli.bluetoothtester.model.AdbResponse
 
 /**
- * ADB 命令协议（LocalSocket JSON 线协议）。
+ * ADB 命令协议（Control Socket JSON 行协议）。
  * 每行一个 JSON 对象，换行符分隔。
  */
 @Serializable
@@ -19,7 +19,7 @@ data class AdbJsonRequest(
 
 /**
  * ADB 命令处理器接口。
- * 由 SppViewModel 实现并注册到 AdbCommandRouter，使 ADB LocalSocket 命令能调用真实的蓝牙操作。
+ * 由 SppViewModel 实现并注册到 AdbCommandRouter，使 ADB Control Socket 命令能调用真实的蓝牙操作。
  */
 interface AdbCommandHandler {
     suspend fun handleSppRegister(params: Map<String, String>): AdbResponse
@@ -35,7 +35,7 @@ interface AdbCommandHandler {
 
 /**
  * 共享 ADB 命令路由器。
- * 从 AdbCommandReceiver 提取，供 BroadcastReceiver 和 LocalSocket Server 两个通道共用。
+ * 从 AdbCommandReceiver 提取，供 BroadcastReceiver 和 Control Socket Server 两个通道共用。
  */
 object AdbCommandRouter {
 
@@ -137,12 +137,12 @@ object AdbCommandRouter {
     }
 
     /**
-     * 将 AdbResponse 序列化为 JSON 字符串（用于 LocalSocket 响应）。
+     * 将 AdbResponse 序列化为 JSON 字符串（用于 Control Socket 响应）。
      */
     fun toJson(response: AdbResponse): String = json.encodeToString(AdbResponse.serializer(), response)
 
     /**
-     * 解析 JSON 请求字符串为 AdbJsonRequest（用于 LocalSocket 请求）。
+     * 解析 JSON 请求字符串为 AdbJsonRequest（用于 Control Socket 请求）。
      */
     fun parseRequest(jsonLine: String): AdbJsonRequest? {
         return try {

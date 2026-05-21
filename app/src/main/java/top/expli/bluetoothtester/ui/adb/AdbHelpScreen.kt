@@ -60,7 +60,6 @@ import kotlinx.coroutines.launch
 import top.expli.bluetoothtester.adb.AdbCommandDoc
 import top.expli.bluetoothtester.adb.AdbCommandDocs
 import top.expli.bluetoothtester.adb.AdbCommandReceiver
-import top.expli.bluetoothtester.adb.AdbLocalSocketServer
 
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -118,9 +117,9 @@ fun AdbHelpScreen(onBackClick: () -> Unit) {
                     )
                 }
 
-                // ── LocalSocket 连接方式 ──
+                // ── Control Socket 连接方式 ──
                 item {
-                    LocalSocketSection(
+                    ControlSocketSection(
                         onCopy = { text ->
                             copyToClipboard(context, text)
                             scope.launch { snackbarHostState.showSnackbar("已复制") }
@@ -220,7 +219,7 @@ private fun ActionPrefixSection(onCopy: (String) -> Unit) {
 
 
 @Composable
-private fun LocalSocketSection(onCopy: (String) -> Unit) {
+private fun ControlSocketSection(onCopy: (String) -> Unit) {
     val socketName = "bt_tester_adb_control"
     val setupCommands = listOf(
         "# 1. 在电脑上设置 ADB 端口转发" to
@@ -251,14 +250,14 @@ private fun LocalSocketSection(onCopy: (String) -> Unit) {
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "LocalSocket 连接 (推荐调试用)",
+                        text = "Control Socket 连接 (推荐调试用)",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.secondary
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "通过 adb forward 将 TCP 端口转发到 App 内的 LocalSocket，使用 JSON 行协议交互。",
+                        text = "通过 adb forward 将 TCP 端口转发到 App 内的 Control Socket，使用 JSON 行协议交互。",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

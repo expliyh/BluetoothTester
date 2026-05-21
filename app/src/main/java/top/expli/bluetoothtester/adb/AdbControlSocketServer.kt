@@ -20,7 +20,7 @@ import java.io.OutputStreamWriter
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
- * ADB over LocalSocket 服务端。
+ * ADB Control Socket 服务端。
  *
  * 在抽象命名空间 "bt_tester_adb_control" 上监听，
  * 通过 `adb forward tcp:PORT localabstract:bt_tester_adb_control` 将 ADB TCP 端口转发到此 socket。
@@ -46,10 +46,10 @@ import java.util.concurrent.atomic.AtomicInteger
  * - 响应: `{"success":true|false,"data":{...},"error":"<错误码>","message":"<描述>"}` + 换行
  * - 连接保持活跃，可发送多条命令
  */
-object AdbLocalSocketServer {
+object AdbControlSocketServer {
 
     private const val SOCKET_NAME = "bt_tester_adb_control"
-    private const val LOG_TAG = "BtTesterADB_LS"
+    private const val LOG_TAG = "BtTesterADB_CS"
 
     enum class State { Stopped, Starting, Running, Error }
 
@@ -69,7 +69,7 @@ object AdbLocalSocketServer {
     val currentConnections: Int get() = activeConnections.get()
 
     /**
-     * 启动 LocalSocket 服务端。
+     * 启动 Control Socket 服务端。
      * 在 IO 调度器上创建 LocalServerSocket 并循环 accept。
      * 每个连接在独立协程中处理。
      */
@@ -91,7 +91,7 @@ object AdbLocalSocketServer {
 
             serverSocket = srv
             _state.value = State.Running
-            Log.i(LOG_TAG, "ADB LocalSocket 服务端已启动: $SOCKET_NAME")
+            Log.i(LOG_TAG, "ADB Control Socket 服务端已启动: $SOCKET_NAME")
 
             acceptJob = scope.launch {
                 while (isActive) {
@@ -119,11 +119,11 @@ object AdbLocalSocketServer {
     }
 
     /**
-     * 停止 LocalSocket 服务端。
+     * 停止 Control Socket 服务端。
      * 关闭 serverSocket 和所有活跃连接。
      */
     fun stop() {
-        Log.i(LOG_TAG, "正在停止 ADB LocalSocket 服务端...")
+        Log.i(LOG_TAG, "正在停止 ADB Control Socket 服务端...")
         _state.value = State.Stopped
 
         acceptJob?.cancel()
