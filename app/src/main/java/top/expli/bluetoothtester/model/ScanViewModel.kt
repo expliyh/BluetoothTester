@@ -77,7 +77,15 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
         if (filter != null) {
             _filter.value = filter
         }
-        bleScanner.startScan(filter)
+
+        // Clear all results only on a fresh start (no scan currently active)
+        val noActiveScan = bleScanner.state.value !is BleScanner.ScanState.Scanning &&
+                classicScanner.state.value !is ClassicScanner.ScanState.Scanning
+        if (noActiveScan) {
+            bleScanner.clearDevices()
+            classicScanner.clearDevices()
+        }
+        bleScanner.startScan(filter, clearResults = false)
     }
 
     @RequiresPermission(Manifest.permission.BLUETOOTH_SCAN)
@@ -91,7 +99,15 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
         if (bleScanner.state.value is BleScanner.ScanState.Scanning) {
             _uiState.update { it.copy(showClassicAffectsBleWarning = true) }
         }
-        classicScanner.startScan()
+
+        // Clear all results only on a fresh start (no scan currently active)
+        val noActiveScan = bleScanner.state.value !is BleScanner.ScanState.Scanning &&
+                classicScanner.state.value !is ClassicScanner.ScanState.Scanning
+        if (noActiveScan) {
+            bleScanner.clearDevices()
+            classicScanner.clearDevices()
+        }
+        classicScanner.startScan(clearResults = false)
     }
 
     @RequiresPermission(Manifest.permission.BLUETOOTH_SCAN)
@@ -106,16 +122,23 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
         val bleScanning = bleScanner.state.value is BleScanner.ScanState.Scanning
         val classicScanning = classicScanner.state.value is ClassicScanner.ScanState.Scanning
 
+        // Clear all results only on a fresh start (no scan currently active)
+        val noActiveScan = !bleScanning && !classicScanning
+        if (clearResults && noActiveScan) {
+            bleScanner.clearDevices()
+            classicScanner.clearDevices()
+        }
+
         // Stop scanners that are no longer needed in this mode
         if (!needBle) stopBleScan()
         if (!needClassic) stopClassicScan()
 
-        // Start/restart scanners that are needed
+        // Start scanners that are needed (clearResults=false since we handled it above)
         if (needBle && !bleScanning) {
-            bleScanner.startScan(clearResults = clearResults)
+            bleScanner.startScan(clearResults = false)
         }
         if (needClassic && !classicScanning) {
-            classicScanner.startScan(clearResults = clearResults)
+            classicScanner.startScan(clearResults = false)
         }
     }
 
