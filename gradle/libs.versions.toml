@@ -18,7 +18,7 @@ shizuku = "13.1.5"
 libsu = "6.0.0"
 foundation = "1.11.0"
 coroutinesTest = "1.11.0"
-mockk = "1.14.9"
+mockk = "1.14.11"
 robolectric = "4.16.1"
 kotestProperty = "6.1.11"
 
