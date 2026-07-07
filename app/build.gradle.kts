@@ -7,7 +7,7 @@ plugins {
 android {
     namespace = "top.expli.bluetoothtester"
     compileSdk {
-        version = release(36)
+        version = release(37)
     }
 
     val versionNameOverride =
@@ -17,7 +17,7 @@ android {
     defaultConfig {
         applicationId = "top.expli.bluetoothtester"
         minSdk = 33
-        targetSdk = 36
+        targetSdk = 37
         versionCode = 1
         versionName = versionNameOverride ?: "0.0.1-alpha"
 
